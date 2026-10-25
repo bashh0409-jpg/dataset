@@ -24,6 +24,23 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers, then add your app URL with `/auth/callback` to the Supabase redirect URL allow list (for local development: `http://localhost:3000/auth/callback`).
 
+## Supabase CLI in VS Code
+
+The Supabase CLI is installed as a project dependency. Use the VS Code integrated terminal to authenticate and link this checkout to your hosted project:
+
+```bash
+npm run supabase -- login
+npm run supabase -- link
+```
+
+The CLI prompts you to authenticate and choose a project. You can also link directly with `npm run supabase -- link --project-ref <project-ref>`. Once linked, send SQL to the hosted database from the terminal:
+
+```bash
+npm run supabase -- db query --linked "select now();"
+```
+
+Linked queries use your Supabase CLI access token and may require `database_read` permission; write queries require `database_write`. Treat `--linked` queries as production operations and review SQL carefully before running it. Keep schema changes in migration files so they can be reviewed and reproduced.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

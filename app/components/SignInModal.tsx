@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { FaGithub, FaGoogle } from "react-icons/fa6";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type SignInModalProps = {
@@ -10,16 +12,19 @@ type SignInModalProps = {
 
 type Provider = "google" | "github";
 
+const pillButton =
+  "w-full flex items-center cursor-pointer justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+
 export default function SignInModal({
   onClose,
   initialError,
 }: SignInModalProps) {
   const [error, setError] = useState(initialError ?? "");
   const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
+    cancelButtonRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -54,121 +59,74 @@ export default function SignInModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white px-4 backdrop-blur-md">
       <section
         aria-labelledby="signin-title"
         aria-modal="true"
-        className="relative flex w-full max-w-sm flex-col rounded-2xl bg-white p-6 text-[#171717] shadow-2xl sm:p-8"
+        className="relative w-full max-w-xs rounded-2xl bg-white/50 text-cente"
         role="dialog"
       >
-        <div className="flex w-full items-center justify-between gap-4">
-          <h2 id="signin-title" className="text-2xl font-bold">
-            Sign In
-          </h2>
+        <h2
+          id="signin-title"
+          className="geist mb-2 text-left  text-xl font-semibold tracking-tighter text-black"
+        >
+          Sign in or create your profile
+        </h2>
 
-          <button
-            ref={closeButtonRef}
-            aria-label="Close sign-in dialog"
-            className="-mr-2 flex h-9 w-9 items-center justify-center rounded-full text-2xl text-gray-500 transition hover:bg-gray-100 hover:text-black"
-            onClick={onClose}
-            type="button"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              height="24px"
-              viewBox="0 -960 960 960"
-              width="24px"
-              fill="#202ded"
-            >
-              <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
-            </svg>
-          </button>
-        </div>
-        <p className="geist mt-3 pr-6 text-sm tracking-tight font-medium leading-snug text-[#999]">
+        <p className="geist hidde mx-auto text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
           Sign in to access your workspace and manage your synthetic data
           projects.
         </p>
 
-        <div className="grid mt-2 gap-3">
-          <button
-            className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]"
-            disabled={loadingProvider !== null}
-            onClick={() => signInWithProvider("google")}
-            type="button"
-          >
-            <GoogleIcon />
-            {loadingProvider === "google"
-              ? "Connecting..."
-              : "Continue with Google"}
-          </button>
-          <button
-            className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]"
-            disabled={loadingProvider !== null}
-            onClick={() => signInWithProvider("github")}
-            type="button"
-          >
-            <GitHubIcon />
-            {loadingProvider === "github"
-              ? "Connecting..."
-              : "Continue with GitHub"}
-          </button>
-        </div>
-
         {error && (
           <p
             aria-live="polite"
-            className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+            className="geist mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium leading-4 tracking-tight text-red-700"
             role="alert"
           >
             {error}
           </p>
         )}
 
-        <p className="mt-2 geist text-sm tracking-tight font-medium leading-snug text-[#999]">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+        <div className="mt-6 flex w-full geist flex-col items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void signInWithProvider("google")}
+            disabled={loadingProvider !== null}
+            aria-busy={loadingProvider === "google"}
+            className={pillButton}
+          >
+            <FaGoogle aria-hidden="true" className="text-base" />
+            {loadingProvider === "google" ? "Signing in..." : "Google"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void signInWithProvider("github")}
+            disabled={loadingProvider !== null}
+            aria-busy={loadingProvider === "github"}
+            className={pillButton}
+          >
+            <FaGithub aria-hidden="true" className="text-base" />
+            {loadingProvider === "github" ? "Signing in..." : "GitHub"}
+          </button>
+        </div>
+
+        <p className="geist text-left mx-auto mt-6 max-w-xs text-[13px] font-semibold leading-4 tracking-tight text-[#999]">
+          By signing in, you agree to our{" "}
+          <Link href="/legal" className="underline underline-offset-2">
+            Terms and Privacy Policy
+          </Link>
         </p>
+
+        <button
+          ref={cancelButtonRef}
+          type="button"
+          onClick={onClose}
+          className="geist mt-4 text-left bg-black p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-[#999] transition hover:text-white cursor-pointer"
+        >
+          Cancel
+        </button>
       </section>
     </div>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 48 48">
-      <path
-        fill="currentColor"
-        d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z"
-      />
-      <path
-        fill="currentColor"
-        d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5.1c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z"
-      />
-      <path
-        fill="currentColor"
-        d="M12.6 27.7a12 12 0 0 1 0-7.4V15H5.8a20 20 0 0 0 0 17.9l6.8-5.2Z"
-      />
-      <path
-        fill="currentColor"
-        d="M24 12c3 0 5.7 1 7.8 3.1l5.8-5.8A19.5 19.5 0 0 0 24 4 20 20 0 0 0 5.8 15l6.8 5.3C14.2 15.6 18.7 12 24 12Z"
-      />
-    </svg>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-5 w-5"
-      fill="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path d="M12 .8a11.2 11.2 0 0 0-3.54 21.82c.56.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.32-3.76-1.32-.5-1.3-1.24-1.64-1.24-1.64-1.02-.7.08-.69.08-.69 1.12.08 1.71 1.15 1.71 1.15 1 1.7 2.62 1.21 3.26.92.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.23-5.11 5.51.4.35.76 1.03.76 2.08v3.1c0 .3.2.65.77.54A11.2 11.2 0 0 0 12 .8Z" />
-    </svg>
   );
 }
