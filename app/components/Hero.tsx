@@ -8,7 +8,7 @@ const Hero = () => {
       className="grid min-h-svh w-full grid-cols-1 grid-rows-[1fr_auto] bg-[#202ded] p-4 pt-20 text-white md:grid-cols-2 md:p-6 md:pt-20"
     >
       {/* Content: centered in the free space on mobile, right column on desktop */}
-      <section className="flex flex-col justify-center gap-10 md:col-start-2 md:py-4">
+      <section className="flex flex-col h-full justify-center gap-10 md:col-start-2 md:py-4">
         <div className="flex flex-col items-start gap-4 md:gap-6">
           <div className="flex h-12 w-12 items-center justify-center bg-white text-2xl font-semibold text-[#202ded] md:h-20 md:w-20 md:text-5xl">
             SD
