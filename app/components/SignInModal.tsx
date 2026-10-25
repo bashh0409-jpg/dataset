@@ -171,10 +171,10 @@ export default function SignInModal({
             </label>
             <input
               autoComplete="email"
-              className="geist w-full rounded font-semibold border border-black/10 bg-white px-3 py-1 text-sm text-[#333] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="geist w-full rounded text-[16px] font-semibold border border-black/10 bg-white px-3 py-0.5 text-sm text-[#333] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               id="signin-email"
               onChange={(event) => setEmail(event.currentTarget.value)}
-              placeholder="you@mail.com"
+              placeholder="example@mail.com"
               required
               type="email"
               value={email}
