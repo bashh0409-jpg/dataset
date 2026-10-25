@@ -1,6 +1,6 @@
-# Datamint — Project Guide for Coding Agents
+# Synthetic — Project Guide for Coding Agents
 
-> **Working product name:** Datamint  
+> **Working product name:** Synthetic  
 > **Tagline:** Synthetic data for developers  
 > **Status:** Early-stage MVP  
 > **Primary goal:** Help developers generate realistic, relational test data quickly, validate it, and export or access it through an API.
@@ -9,17 +9,19 @@ This document is the source of truth for the product direction and implementatio
 
 ## 1. Product overview
 
-Datamint is a developer tool for creating synthetic datasets for development, testing, demos, and prototypes. Users should be able to define the shape of their data, generate realistic records, preserve relationships between entities, and export the result or retrieve it through an API.
+Synthetic is a developer tool for creating synthetic datasets for development, testing, demos, and prototypes. Users should be able to define the shape of their data, generate realistic records, preserve relationships between entities, and export the result or retrieve it through an API.
 
 The initial product is **synthetic-data-first**. Licensed or real-world datasets may be added in a later phase, but they are not part of the MVP and must not be mixed into synthetic generation without clear provenance, licensing, and access controls.
 
 ### Target users
+
 - Individual software developers
 - Developers testing applications and APIs
 - Small engineering teams that need repeatable test fixtures
 - Product teams preparing safe demo data
 
 ### Core value proposition
+
 - Generate useful test data without manually writing fixtures.
 - Create consistent data across related tables/entities.
 - Reproduce a dataset with a seed.
@@ -31,6 +33,7 @@ The initial product is **synthetic-data-first**. Licensed or real-world datasets
 Build a focused, reliable MVP before adding advanced features.
 
 ### MVP features
+
 1. **Authentication**
    - Sign up, sign in, sign out, and protected dashboard routes.
    - Use Supabase Auth with the official SSR integration.
@@ -59,6 +62,7 @@ Build a focused, reliable MVP before adding advanced features.
    - Explain generation requests, schema format, authentication, limits, and response shapes.
 
 ### Not in the initial MVP
+
 - Marketplace for third-party or licensed datasets
 - Team collaboration and complex workspace permissions
 - Billing and paid plans unless explicitly requested
@@ -87,6 +91,7 @@ Use the existing project setup where possible. Do not replace dependencies or ch
 - **Deployment target:** Vercel for the initial web application
 
 Potential later integrations:
+
 - OpenAI or Anthropic API for translating natural-language prompts into a structured schema.
 - Object storage and a background worker for large exports or long-running jobs.
 
@@ -191,6 +196,7 @@ Record usage metadata
 ```
 
 ### Engine requirements
+
 - Use a registry of supported field types and entity generators.
 - Keep the core engine independent from React and Next.js request/response objects.
 - Support a seed so the same configuration and seed can reproduce the same dataset. Confirm the chosen Faker seeding strategy is deterministic for the supported generators.
@@ -203,7 +209,9 @@ Record usage metadata
 - Keep export formatting in separate modules rather than embedding it in UI components.
 
 ### AI schema design (later enhancement)
+
 If natural-language schema design is added:
+
 1. Use the model only to propose a structured schema.
 2. Validate the model output with Zod.
 3. Reject unsupported field types, excessive counts, unsafe options, and malformed relationships.
@@ -238,6 +246,7 @@ Use a versioned API and document the exact request/response contract. A possible
 This is an illustrative starting point, not a finalized contract. Align it with the actual schema types in the codebase and keep it consistent across the UI, API, tests, and docs.
 
 ### API requirements
+
 - Authenticate API requests with a dedicated API key, not a Supabase service-role key.
 - Store only a cryptographic hash of each API key. Never log or expose raw keys after creation.
 - Compare secrets safely and revoke keys immediately when requested.
@@ -253,6 +262,7 @@ This is an illustrative starting point, not a finalized contract. Align it with 
 Supabase stores application metadata, not every generated row by default.
 
 Potential tables (finalize only as features require them):
+
 - `profiles`
 - `workspaces` and `workspace_members` if workspace support is introduced
 - `projects` if projects are needed for grouping schemas
@@ -264,6 +274,7 @@ Potential tables (finalize only as features require them):
 Use migrations for schema changes and keep them version-controlled.
 
 ### Security requirements
+
 - Enable Row Level Security (RLS) on tables exposed through Supabase APIs.
 - Write explicit policies so users can access only their own records or records shared through authorized membership.
 - Never expose the Supabase service-role key to the browser.
@@ -277,6 +288,7 @@ Use the Supabase server/browser client patterns correctly for the installed vers
 ## 9. Performance and scale
 
 For the MVP:
+
 - Generate moderate datasets in the request lifecycle with strict limits.
 - Stream output or use background jobs only when needed and supported by the architecture.
 - Avoid sending unnecessarily large JSON payloads to the browser.
@@ -287,6 +299,7 @@ For the MVP:
 ## 10. Testing and quality
 
 Add tests for important behavior, especially:
+
 - Schema validation and invalid input rejection
 - Supported field generators
 - Seeded reproducibility
@@ -300,6 +313,7 @@ Add tests for important behavior, especially:
 Before adding or upgrading test tooling, check the project's Node version and installed package versions. Avoid `--force` and `--legacy-peer-deps` as a first response to dependency conflicts. Prefer compatible versions and a clean dependency tree.
 
 Run the relevant checks after changes, such as:
+
 - `npm run lint`
 - `npx tsc --noEmit`
 - `npm test` (once configured)
@@ -339,26 +353,31 @@ Only add provider keys or other variables when the related feature is actually i
 ## 13. Suggested roadmap
 
 ### Phase 1 — Foundation
+
 - Establish project conventions and environment setup.
 - Implement Supabase authentication and protected dashboard routes.
 - Add base layout, navigation, and useful empty states.
 
 ### Phase 2 — Generator
+
 - Define schema types and Zod validation.
 - Implement the deterministic generation engine and core generators.
 - Add preview, count/seed controls, and JSON/CSV export.
 
 ### Phase 3 — Saved schemas
+
 - Persist user-owned schemas securely.
 - Support edit, duplicate, delete, and relationships.
 - Add authorization and RLS tests.
 
 ### Phase 4 — Public API
+
 - Implement API-key creation, hashing, revocation, and authentication.
 - Add `/api/v1/generate`, quotas, rate limits, and API docs.
 - Test request validation and error behavior.
 
 ### Phase 5 — Beta readiness
+
 - Improve usage reporting, observability, accessibility, and error states.
 - Review RLS policies and secret handling.
 - Run production build and security checks.
@@ -366,13 +385,14 @@ Only add provider keys or other variables when the related feature is actually i
 
 ## 14. Naming note
 
-**Datamint** is the current working name, not a confirmed legal or trademark clearance. Before public launch, check domain availability, package-name conflicts, and relevant trademarks. Keep the brand name centralized where practical so it can be changed without editing many unrelated components.
+**Synthetic** is the current working name, not a confirmed legal or trademark clearance. Before public launch, check domain availability, package-name conflicts, and relevant trademarks. Keep the brand name centralized where practical so it can be changed without editing many unrelated components.
 
 ---
 
 ## Definition of done
 
 A task is complete when:
+
 - The requested behavior works in the actual app.
 - Types, validation, authorization, and error handling are appropriate.
 - Relevant tests and checks pass, or any blocker is stated accurately.

@@ -174,7 +174,7 @@ export default function SignInModal({
               className="geist w-full rounded font-semibold border border-black/10 bg-white px-3 py-1 text-sm text-[#333] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               id="signin-email"
               onChange={(event) => setEmail(event.currentTarget.value)}
-              placeholder="you@example.com"
+              placeholder="you@mail.com"
               required
               type="email"
               value={email}
@@ -195,8 +195,8 @@ export default function SignInModal({
         {emailStep === "sent" && (
           <div className="mt-4 flex flex-col gap-3">
             <p className="geist hidde mx-auto text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
-              Check your inbox for a sign-in link sent to <strong>{email}</strong>.
-              Open the link to finish signing in.
+              Check your inbox for a sign-in link sent to{" "}
+              <strong>{email}</strong>. Open the link to finish signing in.
             </p>
             <button
               className={pillButton}
@@ -214,8 +214,12 @@ export default function SignInModal({
 
         <p className="geist text-left mx-auto mt-6 max-w-xs text-[13px] font-semibold leading-4 tracking-tight text-[#999]">
           By signing in, you agree to our{" "}
-          <Link href="/legal" className="underline underline-offset-2">
-            Terms and Privacy Policy
+          <Link href="/terms" className="underline underline-offset-2">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline underline-offset-2">
+           Privacy Policy
           </Link>
         </p>
 

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Legal | Datamint",
-  description: "Privacy, cookies, and terms for the Datamint website.",
+  title: "Legal | Synthetic",
+  description: "Privacy, cookies, and terms for the Synthetic website.",
 };
 
 const sections = [
@@ -24,8 +24,8 @@ export default function LegalPage() {
           </h1>
           <p className="mt-3 text-sm leading-4 tracking-tight ">
             <span className="text-[#999]  text-sm mb-2 font-medium tracking-tight ">
-              These terms and notices apply to the Datamint website and related
-              product experience. Datamint may evolve over time and is provided
+              These terms and notices apply to the Synthetic website and related
+              product experience. Synthetic may evolve over time and is provided
               as a developer tool for synthetic data generation.
             </span>
           </p>
@@ -61,7 +61,7 @@ export default function LegalPage() {
                 or any connected systems.
               </p>
               <p>
-                Datamint provides a platform for synthetic data generation and
+                Synthetic provides a platform for synthetic data generation and
                 related developer workflows. The site and its content are
                 provided for informational and product-use purposes and may be
                 updated, changed, or unavailable at any time without notice.
@@ -74,7 +74,7 @@ export default function LegalPage() {
               </p>
               <p>
                 All content on this website, including text, branding, product
-                names, and visuals, belongs to Datamint or its relevant rights
+                names, and visuals, belongs to Synthetic or its relevant rights
                 holders unless otherwise stated. Please do not reproduce or
                 redistribute materials without permission.
               </p>
@@ -102,9 +102,9 @@ export default function LegalPage() {
               </p>
               <p>
                 With your consent, this site may load Vercel Analytics and Speed
-                Insights to understand site performance and usage patterns. These
-                services may process technical information about your visit. For
-                details, see the{" "}
+                Insights to understand site performance and usage patterns.
+                These services may process technical information about your
+                visit. For details, see the{" "}
                 <a
                   href="https://vercel.com/legal/privacy-policy"
                   target="_blank"
@@ -137,10 +137,10 @@ export default function LegalPage() {
             </h2>
             <div className="space-y-3 text-justify text-sm font-medium leading-4 tracking-tight">
               <p>
-                We use cookies and local storage only where necessary to remember
-                your consent choices and support core website functionality. Your
-                consent selection is saved in the browser so the site can respect
-                it on later visits.
+                We use cookies and local storage only where necessary to
+                remember your consent choices and support core website
+                functionality. Your consent selection is saved in the browser so
+                the site can respect it on later visits.
               </p>
               <p>
                 If you accept analytics, Vercel Analytics and Speed Insights may
@@ -150,9 +150,9 @@ export default function LegalPage() {
                 targeting.
               </p>
               <p>
-                You can clear your saved choice by removing this site&apos;s local
-                storage in your browser settings. Doing so may cause the consent
-                prompt to appear again when you next visit.
+                You can clear your saved choice by removing this site&apos;s
+                local storage in your browser settings. Doing so may cause the
+                consent prompt to appear again when you next visit.
               </p>
             </div>
           </section>
