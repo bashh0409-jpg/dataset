@@ -56,7 +56,7 @@ const Navbar = () => {
       aria-label="Main navigation"
       className={`flex items-center fixed top-0 z-50 justify-between w-full tracking-tigh font-medium p-4 capitalize transition-colors duration-300 ${themeClasses[theme]}`}
     >
-      <p>SD®</p>
+      <p>Majority®</p>
      
       <p className="hidden md:block">Version 0.1</p>
       <a
