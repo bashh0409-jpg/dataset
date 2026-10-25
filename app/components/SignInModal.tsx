@@ -63,11 +63,12 @@ export default function SignInModal({
       <section
         aria-labelledby="signin-title"
         aria-modal="true"
-        className="relative w-full max-w-sm rounded-2xl bg-white p-4 text-[#171717] shadow-2xl sm:p-6"
+        className="relative flex w-full max-w-sm flex-col rounded-2xl bg-white p-6 text-[#171717] shadow-2xl sm:p-8"
         role="dialog"
       >
-        <div className="flex w-full items-center justify-between gap-4 mb-6">
+        <div className="flex w-full items-center justify-between gap-4">
           <h2 className="text-2xl font-bold">Sign In</h2>
+
           <button
             ref={closeButtonRef}
             aria-label="Close sign-in dialog"
@@ -86,15 +87,19 @@ export default function SignInModal({
             </svg>
           </button>
         </div>
+        <p className="geist mt-2 text-sm tracking-tight font-medium leading-tight text-[#999]">
+          Sign in to access your workspace and manage your synthetic data
+          projects.
+        </p>
 
-        <div className="grid gap-3">
-          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-5 font-medium text-[#202ded]">
+        <div className="grid mt-4 gap-4">
+          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]">
             <GoogleIcon />
             {loadingProvider === "google"
               ? "Connecting..."
               : "Continue with Google"}
           </button>
-          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-5 font-medium text-[#202ded]">
+          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]">
             <GitHubIcon />
             {loadingProvider === "github"
               ? "Connecting..."
@@ -105,14 +110,14 @@ export default function SignInModal({
         {error && (
           <p
             aria-live="polite"
-            className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+            className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
             role="alert"
           >
             {error}
           </p>
         )}
 
-        <p className="mt-2 geist  text-center text-sm tracking-tight font-medium leading-relaxed text-[#999]">
+        <p className=" pt-6 geist text-sm tracking-tight font-medium leading-tight text-[#999]">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
       </section>

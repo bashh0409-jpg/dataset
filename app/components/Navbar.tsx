@@ -69,7 +69,7 @@ const Navbar = () => {
         <p className="hidden md:block">Version 0.1</p>
         <a
           href="/documentation"
-          className="flex cursor-pointer items-center gap-1 hover:underline"
+          className="md:flex cursor-pointer hidden items-center gap-1 hover:underline"
         >
           Documentation
           <svg
