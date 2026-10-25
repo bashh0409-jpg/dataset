@@ -67,12 +67,14 @@ export default function SignInModal({
         role="dialog"
       >
         <div className="flex w-full items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold">Sign In</h2>
+          <h2 id="signin-title" className="text-2xl font-bold">
+            Sign In
+          </h2>
 
           <button
             ref={closeButtonRef}
             aria-label="Close sign-in dialog"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-2xl text-gray-500 transition hover:bg-gray-100 hover:text-black"
+            className="-mr-2 flex h-9 w-9 items-center justify-center rounded-full text-2xl text-gray-500 transition hover:bg-gray-100 hover:text-black"
             onClick={onClose}
             type="button"
           >
@@ -87,19 +89,29 @@ export default function SignInModal({
             </svg>
           </button>
         </div>
-        <p className="geist mt-2 text-sm tracking-tight font-medium leading-tight text-[#999]">
+        <p className="geist mt-3 pr-6 text-sm tracking-tight font-medium leading-snug text-[#999]">
           Sign in to access your workspace and manage your synthetic data
           projects.
         </p>
 
-        <div className="grid mt-4 gap-4">
-          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]">
+        <div className="grid mt-2 gap-3">
+          <button
+            className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]"
+            disabled={loadingProvider !== null}
+            onClick={() => signInWithProvider("google")}
+            type="button"
+          >
             <GoogleIcon />
             {loadingProvider === "google"
               ? "Connecting..."
               : "Continue with Google"}
           </button>
-          <button className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]">
+          <button
+            className="text-center flex justify-center w-full items-center gap-3 rounded bg-black/30 px-4 py-4 font-medium text-[#202ded]"
+            disabled={loadingProvider !== null}
+            onClick={() => signInWithProvider("github")}
+            type="button"
+          >
             <GitHubIcon />
             {loadingProvider === "github"
               ? "Connecting..."
@@ -117,7 +129,7 @@ export default function SignInModal({
           </p>
         )}
 
-        <p className=" pt-6 geist text-sm tracking-tight font-medium leading-tight text-[#999]">
+        <p className="mt-2 geist text-sm tracking-tight font-medium leading-snug text-[#999]">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
       </section>
