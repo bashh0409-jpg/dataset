@@ -24,6 +24,8 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers, then add your app URL with `/auth/callback` to the Supabase redirect URL allow list (for local development: `http://localhost:3000/auth/callback`).
 
+After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can generate a single-use invite link for a teammate; links expire after seven days and can only be accepted by the invited email address.
+
 ## Supabase CLI in VS Code
 
 The Supabase CLI is installed as a project dependency. Use the VS Code integrated terminal to authenticate and link this checkout to your hosted project:

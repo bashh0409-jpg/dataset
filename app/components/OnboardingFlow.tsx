@@ -14,7 +14,9 @@ type OnboardingFlowProps = {
 type Step = "name" | "workspace" | "invite" | "complete";
 
 const inputClass =
-  "mt-2 w-full rounded-lg border border-black/15 bg-white px-4 py-3 text-base outline-none transition focus:border-[#202ded] focus:ring-2 focus:ring-[#202ded]/15";
+  "geist mt-2 max-h-9 w-full rounded border border-black/10 bg-black/[0.03] px-3 py-2 text-sm font-semibold leading-4 tracking-tight text-[#333] outline-none transition  focus:bg-black/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+const actionButtonClass =
+  "geist mt-5 w-full cursor-pointer rounded bg-black px-3 py-2 text-sm font-semibold leading-4 tracking-tight text-white transition duration-300 hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
   const router = useRouter();
@@ -91,19 +93,24 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
   };
 
   return (
-    <main className="min-h-svh bg-[#f7f7f5] px-5 pb-16 pt-28 text-[#171717] md:px-12">
-      <section className="mx-auto w-full max-w-xl rounded-2xl bg-white p-6 shadow-sm sm:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#202ded]">
-          Majority®
-        </p>
-        <div className="mt-8 flex gap-2" aria-label="Onboarding progress">
+    <main className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-white px-4 py-10 text-black backdrop-blur-md">
+      {" "}
+      <p className="geist absolute left-4 top-5 text-sm font-medium leading-4 tracking-tight text-[#999]">
+        Step 1 of 3
+      </p>
+      <section className="relative w-full max-w-xs rounded-2xl bg-white/50">
+        <div
+          className="mb-6 flex hidden gap-1.5"
+          aria-label="Onboarding progress"
+        >
           {(["name", "workspace", "invite"] as const).map((item, index) => (
             <span
               key={item}
               aria-label={`Step ${index + 1}${step === item ? ", current" : ""}`}
-              className={`h-1.5 flex-1 rounded-full ${
-                ["name", "workspace", "invite", "complete"].indexOf(step) >= index
-                  ? "bg-[#202ded]"
+              className={`h-1 flex-1  rounded ${
+                ["name", "workspace", "invite", "complete"].indexOf(step) >=
+                index
+                  ? "bg-black"
                   : "bg-black/10"
               }`}
             />
@@ -111,22 +118,20 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         </div>
 
         {step === "name" && (
-          <form className="mt-8" onSubmit={submitName}>
-            <p className="text-sm font-medium text-gray-500">Step 1 of 3</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+          <form onSubmit={submitName}>
+            <h1 className="geist mt-1 hidden text-xl font-semibold tracking-tighter">
               What should we call you?
             </h1>
-            <p className="mt-2 text-gray-600">
-              This name will appear on your profile.
+            <p className="geist text-sm mb-2 font-medium leading-4 tracking-tight text-[#999]">
+              What should we call you? This name will appear on your profile.
             </p>
-            <label className="mt-6 block text-sm font-medium" htmlFor="display-name">
-              Your name
-            </label>
+
             <input
               autoComplete="name"
               className={inputClass}
               id="display-name"
               maxLength={80}
+              placeholder="John Smith"
               onChange={(event) => setDisplayName(event.target.value)}
               required
               value={displayName}
@@ -136,17 +141,12 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         )}
 
         {step === "workspace" && (
-          <form className="mt-8" onSubmit={submitWorkspace}>
-            <p className="text-sm font-medium text-gray-500">Step 2 of 3</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-              Create your workspace
-            </h1>
-            <p className="mt-2 text-gray-600">
-              A shared home for your schemas and generated datasets.
+          <form onSubmit={submitWorkspace}>
+            <p className="geist mt-1 text-sm font-medium leading-4 tracking-tight text-[#999]">
+              Create your workspace. A shared home for your schemas and
+              generated datasets.
             </p>
-            <label className="mt-6 block text-sm font-medium" htmlFor="workspace-name">
-              Workspace name
-            </label>
+
             <input
               autoComplete="organization"
               className={inputClass}
@@ -162,16 +162,15 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         )}
 
         {step === "invite" && (
-          <form className="mt-8" onSubmit={submitInvite}>
-            <p className="text-sm font-medium text-gray-500">Step 3 of 3</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-              Invite someone to join
-            </h1>
-            <p className="mt-2 text-gray-600">
-              Create a private invite link for a teammate. You can share it with
-              them directly.
+          <form onSubmit={submitInvite}>
+            <p className="geist mt-1 text-sm font-medium leading-4 tracking-tight text-[#999]">
+              Invite someone to join. Create a private invite link for a
+              teammate. You can share it with them directly.
             </p>
-            <label className="mt-6 block text-sm font-medium" htmlFor="invite-email">
+            <label
+              className="geist mt-5 block text-xs font-semibold leading-4 tracking-tight text-[#555]"
+              htmlFor="invite-email"
+            >
               Teammate&apos;s email
             </label>
             <input
@@ -186,7 +185,7 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
             />
             <ContinueButton busy={busy} label="Create invite link" />
             <button
-              className="mt-3 w-full rounded-lg px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
+              className="geist mt-3 w-full cursor-pointer rounded px-3 py-2 text-xs font-semibold leading-4 tracking-tight text-[#777] transition hover:bg-black/[0.05] hover:text-black"
               onClick={() => setStep("complete")}
               type="button"
             >
@@ -196,20 +195,16 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         )}
 
         {step === "complete" && (
-          <div className="mt-8">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {inviteUrl ? "Your workspace is ready" : "Workspace created"}
-            </h1>
-            <p className="mt-2 text-gray-600">
+          <div>
+            
+            <p className="geist mt-2 text-sm font-medium leading-4 tracking-tight text-[#999]">
               {inviteUrl
                 ? "Share this one-time link with your teammate. It expires in 7 days and can only be used by the invited email address."
                 : "You can invite teammates from your workspace later."}
             </p>
             {inviteUrl && (
-              <div className="mt-6">
-                <label className="block text-sm font-medium" htmlFor="invite-link">
-                  Invite link
-                </label>
+              <div className="mt-2">
+               
                 <input
                   className={`${inputClass} text-sm`}
                   id="invite-link"
@@ -217,7 +212,7 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
                   value={inviteUrl}
                 />
                 <button
-                  className="mt-3 w-full rounded-lg border border-black/15 px-4 py-3 font-medium transition hover:bg-gray-50"
+                  className="geist mt-3 w-full cursor-pointer rounded border border-black/10 bg-black/[0.03] px-3 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] transition hover:bg-black/[0.06]"
                   onClick={() => void copyInvite()}
                   type="button"
                 >
@@ -226,7 +221,7 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
               </div>
             )}
             <button
-              className="mt-6 w-full rounded-lg bg-[#202ded] px-4 py-3 font-medium text-white transition hover:bg-[#1924c8]"
+              className={actionButtonClass}
               onClick={() => router.replace("/workspace")}
               type="button"
             >
@@ -238,7 +233,7 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         {error && (
           <p
             aria-live="polite"
-            className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+            className="geist mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium leading-4 tracking-tight text-red-700"
             role="alert"
           >
             {error}
@@ -258,7 +253,7 @@ function ContinueButton({
 }) {
   return (
     <button
-      className="mt-6 w-full rounded-lg bg-[#202ded] px-4 py-3 font-medium text-white transition hover:bg-[#1924c8] disabled:cursor-wait disabled:opacity-60"
+      className={actionButtonClass}
       disabled={busy}
       type="submit"
     >

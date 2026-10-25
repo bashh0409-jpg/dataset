@@ -15,6 +15,8 @@ type Provider = "google" | "github";
 
 const pillButton =
   "w-full flex items-center cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+const codeButton =
+  "w-full flex items-center  text-center aspect-square cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function SignInModal({
   onClose,
@@ -72,7 +74,7 @@ export default function SignInModal({
           id="signin-title"
           className="geist mb-2 text-left  text-xl font-semibold tracking-tighter text-black"
         >
-          Sign in or create your profile
+          Sign in or Create your profile
         </h2>
 
         <p className="geist hidde mx-auto text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
@@ -111,6 +113,15 @@ export default function SignInModal({
             <FaGithub aria-hidden="true" className="text-base" />
             {loadingProvider === "github" ? "Signing in..." : "GitHub"}
           </button>
+        </div>
+
+        <div className='flex w-full hidden  items-center justify-between gap-2 mt-4'>
+<input placeholder="0" className={codeButton}/>
+<input placeholder="0" className={codeButton}/>
+<input placeholder="0" className={codeButton}/>
+<input placeholder="0" className={codeButton}/>
+<input placeholder="0" className={codeButton}/>
+<input placeholder="0" className={codeButton}/>
         </div>
 
         <p className="geist text-left mx-auto mt-6 max-w-xs text-[13px] font-semibold leading-4 tracking-tight text-[#999]">
