@@ -1,4 +1,14 @@
 @import "tailwindcss";
+@import "locomotive-scroll/locomotive-scroll.css";
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
 
 :root {
   --background: #ffffff;
@@ -8,8 +18,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-helvetica-now), var(--font-geist-sans), sans-serif;
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-pp-locomotive), sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +33,22 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-helvetica-now), var(--font-geist-sans), sans-serif;
+}
+
+.geist {
+  font-family: var(--font-geist-sans);
+}
+
+.text-blue {
+  color:#202ded; 
+}
+
+
+.intro {
+  font-family: var(--font-pp-locomotive), sans-serif;
+font-size: 120px;
+line-height: 120px;
+letter-spacing: -3.6px;
+color: #fff;
 }

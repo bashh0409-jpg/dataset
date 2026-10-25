@@ -1,15 +1,44 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
+import Navbar from "./components/Navbar";
+import SmoothScroll from "./components/SmoothScroll";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../public/fonts/Geist.woff2",
+  weight: "400 600",
+  style: "normal",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../public/fonts/GeistMono.woff2",
+  weight: "400 600",
+  style: "normal",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+});
+
+const helveticaNow = localFont({
+  src: [
+    {
+      path: "../public/fonts/HelveticaNowDisplay-Regular.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/HelveticaNowDisplay-Medium.woff2",
+      weight: "500",
+      style: "normal",
+    },
+  ],
+  variable: "--font-helvetica-now",
+});
+
+const ppLocomotive = localFont({
+  src: "../public/fonts/PPLocomotiveNew-Light.woff2",
+  weight: "300",
+  style: "normal",
+  variable: "--font-pp-locomotive",
 });
 
 export const metadata: Metadata = {
@@ -21,9 +50,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${helveticaNow.variable} ${ppLocomotive.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">{children}
+        <SmoothScroll />
+        <Navbar/>
+      </body>
     </html>
   );
 }
