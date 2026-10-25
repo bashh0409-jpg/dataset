@@ -29,6 +29,12 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const stepNumber = {
+    name: 1,
+    workspace: 2,
+    invite: 3,
+    complete: 3,
+  }[step];
 
   const submitName = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -95,8 +101,8 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
   return (
     <main className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-white px-4 py-10 text-black backdrop-blur-md">
       {" "}
-      <p className="geist absolute left-4 top-5 text-sm font-medium leading-4 tracking-tight text-[#999]">
-        Step 1 of 3
+      <p className="geist absolute right-4 top-5 text-sm font-medium leading-4 tracking-tight text-[#999]">
+        Step {stepNumber} of 3
       </p>
       <section className="relative w-full max-w-xs rounded-2xl bg-white/50">
         <div
@@ -163,16 +169,11 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
 
         {step === "invite" && (
           <form onSubmit={submitInvite}>
-            <p className="geist mt-1 text-sm font-medium leading-4 tracking-tight text-[#999]">
+            <p className="geist mt-1 mb-2 text-sm font-medium leading-4 tracking-tight text-[#999]">
               Invite someone to join. Create a private invite link for a
               teammate. You can share it with them directly.
             </p>
-            <label
-              className="geist mt-5 block text-xs font-semibold leading-4 tracking-tight text-[#555]"
-              htmlFor="invite-email"
-            >
-              Teammate&apos;s email
-            </label>
+           
             <input
               autoComplete="email"
               className={inputClass}

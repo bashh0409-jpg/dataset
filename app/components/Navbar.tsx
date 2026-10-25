@@ -65,11 +65,11 @@ const Navbar = () => {
         aria-label="Main navigation"
         className={`fixed top-0 z-50 flex w-full items-center justify-between p-4 font-medium capitalize  transition-colors duration-300 ${themeClasses[theme]}`}
       >
-        <p>Majority®</p>
+        <p>Synthetic®</p>
         <p className="hidden md:block">Version 0.1</p>
         <a
           href="/documentation"
-          className="md:flex cursor-pointer hidden items-center gap-1 hover:underline"
+          className="cursor-pointer hidden items-center gap-1 hover:underline"
         >
           Documentation
           <svg

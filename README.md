@@ -24,6 +24,23 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers. Email sign-in uses Supabase's default magic-link templates and does not require template customization. Add your app URL with `/auth/callback` to the Supabase redirect URL allow list (for local development: `http://localhost:3000/auth/callback`).
 
+### Local email testing with Supabase
+
+For local development, run the Supabase stack locally and use Supabase's built-in mail catcher so emails can be tested without a production SMTP setup:
+
+```bash
+npm run supabase -- start
+```
+
+This starts the local Supabase services, including the local auth API and the email capture UI. You can then:
+
+- Use `http://localhost:54321` as the local Supabase URL.
+- Set `NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321` in your `.env.local` file.
+- Add `http://localhost:3000/auth/callback` to the allowed redirect URLs in the local Supabase project.
+- View captured emails at `http://localhost:54324` (Inbucket / mail catcher UI).
+
+The local Supabase project also exposes the anon/service-role keys in the terminal output from `supabase start`; copy those into your local environment file so the app and auth flows work on localhost.
+
 After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can generate a single-use invite link for a teammate; links expire after seven days and can only be accepted by the invited email address.
 
 ## Supabase CLI in VS Code

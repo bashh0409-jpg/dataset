@@ -36,7 +36,7 @@ export default function InviteSignIn({ token }: { token: string }) {
     <main className="flex min-h-svh items-center justify-center bg-[#f7f7f5] px-5 py-16 text-[#171717]">
       <section className="w-full max-w-md rounded-2xl bg-white p-7 shadow-sm sm:p-10">
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#202ded]">
-          Majority®
+          Synthetic®
         </p>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">
           You&apos;re invited

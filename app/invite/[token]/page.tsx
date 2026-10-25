@@ -66,7 +66,7 @@ function InviteError() {
           className="mt-6 inline-block font-medium text-[#202ded] underline"
           href="/"
         >
-          Return to Majority
+          Return to Synthetic
         </Link>
       </section>
     </main>

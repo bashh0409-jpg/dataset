@@ -19,7 +19,7 @@ type SignInModalProps = {
 type Provider = "google" | "github";
 
 const pillButton =
-  "w-full flex items-center cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full flex items-center cursor-pointer duration-400 justify-center gap-2 geist capitaliz max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function SignInModal({
   onClose,
@@ -159,7 +159,7 @@ export default function SignInModal({
               disabled={loadingAction !== null}
               className={pillButton}
             >
-              Sign in with email
+              Use Email
             </button>
           </div>
         )}
