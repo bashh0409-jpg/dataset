@@ -37,5 +37,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.redirect(new URL("/workspace", request.url));
+  const requestedNext = request.nextUrl.searchParams.get("next");
+  const nextUrl = requestedNext
+    ? new URL(requestedNext, request.url)
+    : new URL("/onboarding", request.url);
+  const destination =
+    nextUrl.origin === request.nextUrl.origin && requestedNext?.startsWith("/")
+      ? nextUrl
+      : new URL("/onboarding", request.url);
+
+  return NextResponse.redirect(destination);
 }

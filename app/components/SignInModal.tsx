@@ -8,16 +8,18 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 type SignInModalProps = {
   onClose: () => void;
   initialError?: string;
+  redirectPath?: string;
 };
 
 type Provider = "google" | "github";
 
 const pillButton =
-  "w-full flex items-center cursor-pointer justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full flex items-center cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function SignInModal({
   onClose,
   initialError,
+  redirectPath = "/onboarding",
 }: SignInModalProps) {
   const [error, setError] = useState(initialError ?? "");
   const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null);
@@ -43,7 +45,7 @@ export default function SignInModal({
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
         },
       });
 
@@ -122,7 +124,7 @@ export default function SignInModal({
           ref={cancelButtonRef}
           type="button"
           onClick={onClose}
-          className="geist mt-4 text-left bg-black p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-[#999] transition hover:text-white cursor-pointer"
+          className="geist mt-4 text-lef justify-center item-center w-full bg-black p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-white transition duration-400 hover:bg-black/60 cursor-pointer"
         >
           Cancel
         </button>
