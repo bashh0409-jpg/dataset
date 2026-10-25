@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { FaGithub, FaGoogle } from "react-icons/fa6";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -15,8 +20,6 @@ type Provider = "google" | "github";
 
 const pillButton =
   "w-full flex items-center cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
-const codeButton =
-  "w-full flex items-center  text-center aspect-square cursor-pointer duration-400 justify-center gap-2 geist capitalize max-h-7 rounded border border-black/10 bg-black/[0.03] px-2 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] [overflow-wrap:anywhere] transition hover:bg-black/20 transition-color focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function SignInModal({
   onClose,
@@ -24,7 +27,13 @@ export default function SignInModal({
   redirectPath = "/onboarding",
 }: SignInModalProps) {
   const [error, setError] = useState(initialError ?? "");
-  const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null);
+  const [loadingAction, setLoadingAction] = useState<
+    Provider | "email" | null
+  >(null);
+  const [emailStep, setEmailStep] = useState<"closed" | "email" | "sent">(
+    "closed",
+  );
+  const [email, setEmail] = useState("");
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -40,7 +49,7 @@ export default function SignInModal({
 
   const signInWithProvider = async (provider: Provider) => {
     setError("");
-    setLoadingProvider(provider);
+    setLoadingAction(provider);
 
     try {
       const supabase = createSupabaseBrowserClient();
@@ -58,7 +67,34 @@ export default function SignInModal({
           ? authError.message
           : "Unable to start sign-in. Please try again.",
       );
-      setLoadingProvider(null);
+      setLoadingAction(null);
+    }
+  };
+
+  const sendEmailLink = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setLoadingAction("email");
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: authError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
+        },
+      });
+
+      if (authError) throw authError;
+      setEmailStep("sent");
+    } catch (authError) {
+      setError(
+        authError instanceof Error
+          ? authError.message
+          : "Unable to send a sign-in link. Please try again.",
+      );
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -92,37 +128,89 @@ export default function SignInModal({
           </p>
         )}
 
-        <div className="mt-6 flex w-full geist flex-col items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => void signInWithProvider("google")}
-            disabled={loadingProvider !== null}
-            aria-busy={loadingProvider === "google"}
-            className={pillButton}
-          >
-            <FaGoogle aria-hidden="true" className="text-base" />
-            {loadingProvider === "google" ? "Signing in..." : "Google"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void signInWithProvider("github")}
-            disabled={loadingProvider !== null}
-            aria-busy={loadingProvider === "github"}
-            className={pillButton}
-          >
-            <FaGithub aria-hidden="true" className="text-base" />
-            {loadingProvider === "github" ? "Signing in..." : "GitHub"}
-          </button>
-        </div>
+        {emailStep === "closed" && (
+          <div className="mt-6 flex w-full geist flex-col items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => void signInWithProvider("google")}
+              disabled={loadingAction !== null}
+              aria-busy={loadingAction === "google"}
+              className={pillButton}
+            >
+              <FaGoogle aria-hidden="true" className="text-base" />
+              {loadingAction === "google" ? "Signing in..." : "Google"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void signInWithProvider("github")}
+              disabled={loadingAction !== null}
+              aria-busy={loadingAction === "github"}
+              className={pillButton}
+            >
+              <FaGithub aria-hidden="true" className="text-base" />
+              {loadingAction === "github" ? "Signing in..." : "GitHub"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError("");
+                setEmailStep("email");
+              }}
+              disabled={loadingAction !== null}
+              className={pillButton}
+            >
+              Sign in with email
+            </button>
+          </div>
+        )}
 
-        <div className='flex w-full hidden  items-center justify-between gap-2 mt-4'>
-<input placeholder="0" className={codeButton}/>
-<input placeholder="0" className={codeButton}/>
-<input placeholder="0" className={codeButton}/>
-<input placeholder="0" className={codeButton}/>
-<input placeholder="0" className={codeButton}/>
-<input placeholder="0" className={codeButton}/>
-        </div>
+        {emailStep === "email" && (
+          <form className="mt-4 flex flex-col gap-2" onSubmit={sendEmailLink}>
+            <label className="sr-only" htmlFor="signin-email">
+              Email address
+            </label>
+            <input
+              autoComplete="email"
+              className="geist w-full rounded font-semibold border border-black/10 bg-white px-3 py-1 text-sm text-[#333] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              id="signin-email"
+              onChange={(event) => setEmail(event.currentTarget.value)}
+              placeholder="you@example.com"
+              required
+              type="email"
+              value={email}
+            />
+            <button
+              aria-busy={loadingAction === "email"}
+              className={pillButton}
+              disabled={loadingAction !== null}
+              type="submit"
+            >
+              {loadingAction === "email"
+                ? "Sending link..."
+                : "Send sign-in link"}
+            </button>
+          </form>
+        )}
+
+        {emailStep === "sent" && (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="geist hidde mx-auto text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
+              Check your inbox for a sign-in link sent to <strong>{email}</strong>.
+              Open the link to finish signing in.
+            </p>
+            <button
+              className={pillButton}
+              disabled={loadingAction !== null}
+              onClick={() => {
+                setError("");
+                setEmailStep("email");
+              }}
+              type="button"
+            >
+              Use a different email
+            </button>
+          </div>
+        )}
 
         <p className="geist text-left mx-auto mt-6 max-w-xs text-[13px] font-semibold leading-4 tracking-tight text-[#999]">
           By signing in, you agree to our{" "}
