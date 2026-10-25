@@ -56,9 +56,14 @@ const Navbar = () => {
       aria-label="Main navigation"
       className={`flex items-center fixed top-0 z-50 justify-between w-full tracking-tigh font-medium p-4 capitalize transition-colors duration-300 ${themeClasses[theme]}`}
     >
-      <p>Source®</p>
-      <p>Version 0.1</p>
-      <a href="/documentation" target='_blank' className="cursor-pointer flex items-center gap-1 hover:underline">
+      <p>SD®</p>
+     
+      <p className="hidden md:block">Version 0.1</p>
+      <a
+        href="/documentation"
+        target="_blank"
+        className="cursor-pointer flex items-center gap-1 hover:underline"
+      >
         Documentation{" "}
         <svg
           xmlns="http://www.w3.org/2000/svg"
