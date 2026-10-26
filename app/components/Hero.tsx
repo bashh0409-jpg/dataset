@@ -5,7 +5,7 @@ const Hero = () => {
   return (
     <div
       data-nav-theme="blue"
-      className="grid min-h-svh w-full grid-cols-1 grid-rows-[1fr_auto] bg-[#202ded] p-4 pt-20 text-white md:grid-cols-2 md:p-6 md:pt-20"
+      className="grid min-h-svh hn w-full grid-cols-1 grid-rows-[1fr_auto] bg-[#202ded] p-4 pt-20 text-white md:grid-cols-2 md:p-6 md:pt-20"
     >
       {/* Content: centered in the free space on mobile, right column on desktop */}
       <section className="flex flex-col h-full justify-center gap-10 md:col-start-2 md:py-4">

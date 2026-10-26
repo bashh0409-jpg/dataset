@@ -18,7 +18,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-helvetica-now), var(--font-geist-sans), sans-serif;
+  --font-sans: var(--font-geist-sans), sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-pp-locomotive), sans-serif;
 }
@@ -38,6 +38,10 @@ body {
 
 .geist {
   font-family: var(--font-geist-sans);
+}
+
+.hn {
+    font-family: var(--font-helvetica-now);
 }
 
 .text-blue {

@@ -68,10 +68,10 @@ const Navbar = () => {
       <nav
         ref={navRef}
         aria-label="Main navigation"
-        className={`fixed top-0 z-50 flex w-full items-center justify-between p-4 font-medium capitalize  transition-colors duration-300 ${themeClasses[theme]}`}
+        className={`fixed top-0 z-50 hn flex w-full items-center justify-between p-4 font-medium capitalize  transition-colors duration-300 ${themeClasses[theme]}`}
       >
         <p>Synthetic®</p>
-        <p className="hidden md:block">Version 0.1</p>
+        <p className="hidden hn md:block">Version 0.1</p>
         <a
           href="/documentation"
           className="cursor-pointer hidden items-center gap-1 hover:underline"

@@ -45,6 +45,10 @@ The local Supabase project also exposes the anon/service-role keys in the termin
 
 After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can send a single-use workspace invitation by email; the invitation expires after seven days and can only be accepted by the invited email address.
 
+## Data generator
+
+The workspace **Generate** section uses OpenRouter's `qwen/qwen3.7-plus` model to turn a natural-language description into a validated data schema, then generates up to 500 synthetic records in the app. Add a server-only `OPENROUTER_API_KEY` to enable AI schema generation. OpenRouter account credits, model availability, and pricing may apply. The generated data can be viewed as a table, JSON, or CSV, and JSON/CSV can be copied or downloaded. A seed reproduces the same generated values for the same schema. Generated records are held in the browser and are not persisted.
+
 ### Workspace invitation emails
 
 Workspace invitations are sent with Resend. Set `RESEND_API_KEY` to a server-only Resend API key and `RESEND_FROM_EMAIL` to a sender address verified by Resend. Set `NEXT_PUBLIC_SITE_URL` to the app's public origin (`http://localhost:3000` for local development) so the emailed invitation points to the correct app. In production, use your deployed HTTPS URL and a verified sending domain. The invite URL is only sent to the recipient; the raw token is not returned to the browser.

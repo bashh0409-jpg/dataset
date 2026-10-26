@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import DeveloperPanel, { type ApiKeySummary } from "./DeveloperPanel";
+import GeneratorPanel from "./GeneratorPanel";
 import WorkspaceAccessDialog from "./WorkspaceAccessDialog";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 
@@ -362,6 +363,10 @@ export default function WorkspaceShell({
         {activeView === "developer" ? (
           <div className="absolute inset-0 overflow-y-auto">
             <DeveloperPanel initialKeys={apiKeys} />
+          </div>
+        ) : activeView === "generate" ? (
+          <div className="absolute inset-0 overflow-y-auto">
+            <GeneratorPanel />
           </div>
         ) : (
           <div aria-hidden="true" className="workspace-watermark">
