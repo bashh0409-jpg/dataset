@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Check,
   ChevronDown,
   Share2,
   UsersRound,
@@ -11,31 +10,75 @@ import {
 type WorkspaceToolbarProps = {
   billingStatusError: string;
   isPro: boolean;
+  model: "auto" | "claude" | "openai";
   workspaceName: string;
+  onModelChange: (model: "auto" | "claude" | "openai") => void;
   onManage: () => void;
   onInvite: () => void;
 };
 
 const buttonClass =
-  "flex w-fit items-center gap-2 rounded-full px-2 py-1.5 text-left text-[12px] font-medium tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
+  "flex w-fit items-center gap-2 rounded-full px-2 py-1.5 text-left text-[12px] font-medium tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-0 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
 
 export default function WorkspaceToolbar({
   billingStatusError,
   isPro,
+  model,
   workspaceName,
+  onModelChange,
   onManage,
   onInvite,
 }: WorkspaceToolbarProps) {
   return (
     <div className="absolute top-0 z-20 flex w-full items-center justify-between px-2 py-1">
-      <button
-        aria-label={`Current workspace: ${workspaceName}`}
-        className={buttonClass}
-        type="button"
-      >
-        <span className="max-w-[40vw] truncate">{workspaceName}</span>
-        <ChevronDown aria-hidden="true" className="size-[13px] shrink-0" />
-      </button>
+      <div className="flex items-center gap-2">
+        {" "}
+        <button
+          aria-label={`Current workspace: ${workspaceName}`}
+          className={buttonClass}
+          type="button"
+        >
+          <span className="max-w-[40vw] truncate">{workspaceName}</span>
+          <ChevronDown aria-hidden="true" className="size-[13px] shrink-0" />
+        </button>
+        <label className="relative flex items-center">
+          <span className="sr-only">AI model</span>
+          <select
+            aria-label="AI model"
+            className={`${buttonClass} cursor-pointer appearance-none pr-6`}
+            disabled={!isPro}
+            onChange={(event) => {
+              if (
+                event.currentTarget.value === "auto" ||
+                event.currentTarget.value === "claude" ||
+                event.currentTarget.value === "openai"
+              ) {
+                onModelChange(event.currentTarget.value);
+              }
+            }}
+            title={
+              isPro
+                ? "Choose an AI model"
+                : "Free plan uses the included free model"
+            }
+            value={isPro ? model : "free"}
+          >
+            {isPro ? (
+              <>
+                <option value="auto">Auto</option>
+                <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+              </>
+            ) : (
+              <option value="free">Free model</option>
+            )}
+          </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="pointer-events-none absolute right-1 size-[13px] shrink-0"
+          />
+        </label>
+      </div>
 
       <div className="flex items-center gap-2">
         <button
@@ -81,7 +124,6 @@ export default function WorkspaceToolbar({
             href="/api/billing/portal"
             title="Pro plan active — manage subscription"
           >
-
             Pro
           </a>
         ) : (

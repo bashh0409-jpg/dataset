@@ -22,7 +22,7 @@ const generationInputSchema = z.object({
     .min(1)
     .max(8)
     .refine((messages) => messages.at(-1)?.role === "user"),
-    model: z.enum(["qwen", "claude", "openai"]).default("qwen"),
+    model: z.enum(["qwen", "auto", "claude", "openai"]).default("qwen"),
     funding: z.enum(["included", "byok"]).default("included"),
 });
 
@@ -175,7 +175,8 @@ export async function generateWithAi(
     return { error: "Please sign in again to generate data." };
   }
 
-  const { model, funding } = parsedInput.data;
+  const { funding } = parsedInput.data;
+  let model = parsedInput.data.model;
   let proAiUsage: { used: number; limit: 50 } | undefined;
   let apiKey: string | null = null;
 
@@ -195,6 +196,42 @@ export async function generateWithAi(
       Date.parse(subscription.current_period_end) <= Date.now()
     ) {
       return { error: "Claude and OpenAI models require an active Pro plan." };
+    }
+
+    if (model === "auto") {
+      let availableModels: ("claude" | "openai")[];
+      if (funding === "included") {
+        availableModels = [
+          ...(process.env.ANTHROPIC_API_KEY ? ["claude" as const] : []),
+          ...(process.env.OPENAI_API_KEY ? ["openai" as const] : []),
+        ];
+      } else {
+        const { data: credentials, error: credentialsError } = await supabase
+          .from("ai_provider_credentials")
+          .select("provider")
+          .eq("user_id", user.id);
+
+        if (credentialsError) {
+          return { error: "Unable to load your saved provider keys." };
+        }
+        availableModels = credentials.flatMap((credential) =>
+          credential.provider === "anthropic"
+            ? ["claude" as const]
+            : credential.provider === "openai"
+              ? ["openai" as const]
+              : [],
+        );
+      }
+
+      if (availableModels.length === 0) {
+        return {
+          error:
+            funding === "included"
+              ? "Auto requires at least one configured Claude or OpenAI provider key."
+              : "Add a Claude or OpenAI API key in Pro settings to use Auto.",
+        };
+      }
+      model = availableModels[randomInt(availableModels.length)];
     }
 
     if (funding === "included") {

@@ -40,6 +40,8 @@ type Workspace = {
   name: string;
 };
 
+type AiModel = "auto" | "claude" | "openai";
+
 type WorkspaceShellProps = {
   displayName: string;
   email: string;
@@ -156,6 +158,7 @@ export default function WorkspaceShell({
 }: WorkspaceShellProps) {
   const router = useRouter();
   const [activeView, setActiveView] = useState<WorkspaceView>("generate");
+  const [aiModel, setAiModel] = useState<AiModel>("auto");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
@@ -775,6 +778,8 @@ export default function WorkspaceShell({
         <WorkspaceToolbar
           billingStatusError={billingStatusError}
           isPro={isPro}
+          model={aiModel}
+          onModelChange={setAiModel}
           onManage={() => setAccessDialog("manage")}
           onInvite={() => setAccessDialog("invite")}
           workspaceName={activeWorkspace?.name ?? "Your workspace"}
@@ -796,6 +801,8 @@ export default function WorkspaceShell({
           <div className="absolute inset-0 overflow-y-auto">
             <GeneratorPanel
               key={newConversationToken}
+              isPro={isPro}
+              model={aiModel}
               onChatSaved={handleChatSaved}
               onConversationOpened={setActiveConversationId}
               requestedConversationId={requestedConversationId}

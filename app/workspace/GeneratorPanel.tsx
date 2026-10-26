@@ -85,12 +85,16 @@ const examples = [
 ];
 
 type GeneratorPanelProps = {
+  isPro: boolean;
+  model: "auto" | "claude" | "openai";
   requestedConversationId: string | null;
   onConversationOpened: (id: string) => void;
   onChatSaved: (conversation: AiConversationSummary) => void;
 };
 
 export default function GeneratorPanel({
+  isPro,
+  model,
   requestedConversationId,
   onConversationOpened,
   onChatSaved,
@@ -284,7 +288,10 @@ export default function GeneratorPanel({
 
     try {
       const savedId = await persistConversation(messages, conversationId);
-      const result = await generateWithAi({ messages: messages.slice(-8) });
+      const result = await generateWithAi({
+        messages: messages.slice(-8),
+        model: isPro ? model : "qwen",
+      });
 
       window.clearTimeout(phaseTimeout);
       if ("error" in result) {
