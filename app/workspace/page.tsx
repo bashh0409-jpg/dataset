@@ -71,10 +71,30 @@ async function WorkspaceContent() {
       : typeof user.user_metadata.name === "string"
         ? user.user_metadata.name
         : "";
+  const avatarCandidate =
+    typeof user.user_metadata.avatar_url === "string"
+      ? user.user_metadata.avatar_url
+      : typeof user.user_metadata.picture === "string"
+        ? user.user_metadata.picture
+        : "";
+  let avatarUrl: string | null = null;
+  try {
+    const parsedAvatarUrl = new URL(avatarCandidate);
+    if (
+      parsedAvatarUrl.protocol === "https:" &&
+      (parsedAvatarUrl.hostname === "avatars.githubusercontent.com" ||
+        parsedAvatarUrl.hostname.endsWith(".googleusercontent.com"))
+    ) {
+      avatarUrl = parsedAvatarUrl.toString();
+    }
+  } catch {
+    avatarUrl = null;
+  }
 
   return (
     <WorkspaceShell
       displayName={displayName}
+      avatarUrl={avatarUrl}
       email={user.email ?? ""}
       billingStatusError={billingStatusError}
       isPro={isPro}

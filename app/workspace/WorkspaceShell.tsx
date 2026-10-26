@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Archive,
   ArrowLeft,
@@ -7,7 +8,6 @@ import {
   AtSign,
   Check,
   ChevronDown,
-  Command,
   Ellipsis,
   FilePlus2,
   LayoutGrid,
@@ -46,6 +46,7 @@ type AiModel = "qwen" | "auto" | "claude" | "openai";
 
 type WorkspaceShellProps = {
   displayName: string;
+  avatarUrl: string | null;
   email: string;
   isPro: boolean;
   billingStatusError: string;
@@ -152,6 +153,7 @@ const viewLabels: Record<WorkspaceView, string> = {
 
 export default function WorkspaceShell({
   displayName,
+  avatarUrl,
   email,
   isPro,
   billingStatusError,
@@ -161,6 +163,7 @@ export default function WorkspaceShell({
   const router = useRouter();
   const [activeView, setActiveView] = useState<WorkspaceView>("generate");
   const [aiModel, setAiModel] = useState<AiModel>("qwen");
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
@@ -756,22 +759,7 @@ export default function WorkspaceShell({
                   </p>
                 )}
 
-                <button
-                  className=" w-full hidden px-2 py-1.5 flex items-center text-left text-[12px] text-[#686a64] transition hover:bg-[#f4f5f1] disabled:opacity-50"
-                  type="button"
-                >
-                  <span className="rounded-full flex justify-center text-xs text-white items-center bg-black h-6  aspect-square">
-                    B
-                  </span>
-                  <span className="flex flex-col">
-                    <span className="ml-2 text-xs tracking-tight">
-                      {displayName || email || "Account"}
-                    </span>
-                    <span className="ml-2 text-xs tracking-tight">
-                      {email || "Account"}
-                    </span>
-                  </span>
-                </button>
+                
 
                 <button className={Button} type="button">
                   <svg
@@ -820,20 +808,41 @@ export default function WorkspaceShell({
             <button
               aria-expanded={accountOpen}
               aria-label="Account menu"
-              className="flex h-[26px] w-full min-w-0 items-center gap-[7px] rounded px-[2px] text-left transition hover:bg-[#f1f2ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
+              className="flex min-h-[30px] w-full min-w-0 items-center gap-[7px] py-1 rounded-full px-1 pr-3 text-left transition hover:bg-[#f1f2ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
               onClick={() => setAccountOpen((open) => !open)}
               type="button"
             >
-              <span className="flex size-[15px] shrink-0 items-center justify-center rounded-full bg-[#f0f1ed]">
-                <Command aria-hidden="true" className="size-[10px]" />
+              <span className="relative flex size-[26px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e7e9e3] text-[10px] font-semibold text-[#686a64]">
+                {avatarUrl && !avatarFailed ? (
+                  <Image
+                    alt=""
+                    className="object-cover"
+                    fill
+                    onError={() => setAvatarFailed(true)}
+                    sizes="26px"
+                    src={avatarUrl}
+                  />
+                ) : (
+                  (displayName || email || "A").charAt(0).toUpperCase()
+                )}
               </span>
-              <span className="truncate text-[11px] font-medium text-[#656761] max-[640px]:sr-only">
+              <span className="truncate text-[11px] font-semibold hidden text-[#656761] max-[640px]:sr-only">
                 {displayName || email || "Account"}
               </span>
-              <ChevronDown
-                aria-hidden="true"
-                className="ml-auto size-[12px] shrink-0 text-[#858780] max-[640px]:hidden"
-              />
+              <span className="truncate text-[11px] font-semibold text-[#999] max-[640px]:sr-only">
+                {email}
+              </span>
+
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                height="14px"
+                viewBox="0 -960 960 960"
+                width="14px"
+                className="ml-auto"
+                fill="#999"
+              >
+                <path d="M480-120 300-300l58-58 122 122 122-122 58 58-180 180ZM358-598l-58-58 180-180 180 180-58 58-122-122-122 122Z" />
+              </svg>
             </button>
           </div>
         </footer>

@@ -56,7 +56,7 @@ The **Go Pro** button in the workspace toolbar starts a Polar subscription check
 To enable Pro:
 
 1. Apply the conversation migrations, including `20261026210000_create_ai_generated_artifacts.sql`, to enable private saved chats and generated-data previews.
-2. Apply `20261026180000_add_pro_subscriptions_and_ai_credentials.sql` after the existing migrations, then apply `20261026203000_create_pro_ai_provider_balancing.sql` for balanced Auto routing and `20261026204000_add_pro_ai_rolling_limit.sql` for the rolling Pro request cap. The subscription migration is safe to re-run if its tables were already created; it refreshes the policy and function definitions without dropping subscription or credential data.
+2. Apply `20261026180000_add_pro_subscriptions_and_ai_credentials.sql` after the existing migrations, then apply `20261026203000_create_pro_ai_provider_balancing.sql` for balanced Auto routing, `20261026204000_add_pro_ai_rolling_limit.sql` for the rolling Pro request cap, `20261026224000_add_polar_billing_idempotency.sql` for checkout and webhook idempotency, and `20261026225000_harden_pro_ai_provider_rpcs.sql` to restrict provider-balancing RPCs to trusted server code. The subscription migration is safe to re-run if its tables were already created; it refreshes the policy and function definitions without dropping subscription or credential data.
 3. Create a monthly $10 Pro product in Polar and configure its product ID as `POLAR_PRO_PRODUCT_ID`. Create an organization access token and webhook secret.
 4. Register `https://<your-app-host>/api/webhooks/polar` in Polar for subscription created, updated, active, canceled, cycled, past-due, paused, resumed, revoked, and uncanceled events.
 5. Set `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_PRO_PRODUCT_ID`, `POLAR_ENVIRONMENT` (`sandbox` while testing, `production` for live billing), and `NEXT_PUBLIC_SITE_URL`.
@@ -64,6 +64,10 @@ To enable Pro:
 7. Set `AI_CREDENTIALS_ENCRYPTION_KEY` to a securely generated base64url-encoded 32-byte key (for example, generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`). Keep it private and back it up securely; changing it makes existing saved provider keys unreadable, so users would need to save them again.
 
 Apply the same Polar environment (sandbox or production) to the product, access token, and webhook. Provider prices and usage are variable; the included request cap is intended to bound app-funded usage, not to guarantee a fixed provider cost. For current token pricing, see [Anthropic's pricing](https://platform.claude.com/docs/en/about-claude/pricing) and [OpenAI's pricing](https://developers.openai.com/api/docs/pricing).
+
+Checkout requests are protected by a database-backed per-user claim and reuse an existing open Polar checkout session. If a request fails after Polar created the session, a retry checks Polar for that session before creating another. Signed subscription webhooks are deduplicated by Polar's webhook event ID in the same database transaction as the subscription update. These controls protect against repeated checkout requests and webhook deliveries; they do not block legitimate recurring subscription renewals. The installed Polar SDK does not expose a checkout idempotency-key option, so this is database-backed request deduplication and recovery, not a provider-level exactly-once guarantee for ambiguous network failures.
+
+Pro AI provider reservations are only callable by the server's service-role client. The generation action verifies the signed-in user and Pro subscription first, then passes that user ID to the restricted reservation functions; clients cannot directly create or release provider reservations.
 
 ### Workspace invitation emails
 

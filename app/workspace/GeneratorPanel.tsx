@@ -49,6 +49,7 @@ type DataView = "table" | "json" | "csv";
 type ConversationMessage = {
   role: "user" | "assistant";
   content: string;
+  generatedArtifactId?: string;
 };
 type GeneratorMode = "agent" | "manual";
 type GenerationPhase = "analyzing" | "generating" | "finalizing";
@@ -219,7 +220,9 @@ export default function GeneratorPanel({
       })
       .catch(() => {
         if (active) {
-          setSaveError("A network error occurred while opening the saved chat.");
+          setSaveError(
+            "A network error occurred while opening the saved chat.",
+          );
         }
       });
 
@@ -269,7 +272,9 @@ export default function GeneratorPanel({
     });
 
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Check the dataset settings.");
+      setError(
+        parsed.error.issues[0]?.message ?? "Check the dataset settings.",
+      );
       return;
     }
 
@@ -348,21 +353,21 @@ export default function GeneratorPanel({
           },
         ];
         setConversation(nextMessages);
-        await persistConversation(
-          nextMessages,
-          savedId ?? conversationId,
-        );
+        await persistConversation(nextMessages, savedId ?? conversationId);
         return;
       }
 
       setDataset(result.data);
       setView("table");
       setCopied(false);
+      const fieldSummary = result.data.fields
+        .map((field) => `${field.name} (${fieldLabels[field.type]})`)
+        .join(", ");
       const nextMessages = [
         ...messages,
         {
           role: "assistant" as const,
-          content: `${result.modelNotice ? `${result.modelNotice} ` : ""}Generated ${result.data.count} ${result.data.name} records. You can view or export them on the right.`,
+          content: `${result.modelNotice ? `${result.modelNotice} ` : ""}Your “${result.data.name}” dataset is ready with ${result.data.count} synthetic records and ${result.data.fields.length} fields: ${fieldSummary}. Seed: ${result.data.seed} (use it to reproduce this dataset). The generated records are previewed in the Data panel; switch between Table, JSON, and CSV views, then use the download button to export JSON or CSV.`,
         },
       ];
       setConversation(nextMessages);
@@ -380,6 +385,13 @@ export default function GeneratorPanel({
         } else {
           setArtifacts((current) => [...current, artifactResult.data]);
           setActiveArtifactId(artifactResult.data.id);
+          const linkedMessages = nextMessages.map((message, index) =>
+            index === nextMessages.length - 1
+              ? { ...message, generatedArtifactId: artifactResult.data.id }
+              : message,
+          );
+          setConversation(linkedMessages);
+          await persistConversation(linkedMessages, persistedId);
         }
       }
     } catch {
@@ -420,7 +432,9 @@ export default function GeneratorPanel({
       setCopiedMessageIndex(index);
       window.setTimeout(() => setCopiedMessageIndex(null), 1600);
     } catch {
-      setError("Couldn't copy the message. Please select and copy it manually.");
+      setError(
+        "Couldn't copy the message. Please select and copy it manually.",
+      );
     }
   };
 
@@ -524,7 +538,7 @@ export default function GeneratorPanel({
           })}
           <span className="ml-auto flex items-center  gap-1">
             {dataset && (
-              <span className="shrink-0  bg-white font-semibold uppercase rounded-t-lg text-[10px]  tracking-tight capitalize  text-[#696c64]">
+              <span className="shrink-0 font-semibold uppercase rounded-t-lg text-[10px]  tracking-tight capitalize  text-[#696c64]">
                 {dataset.count} rows
               </span>
             )}
@@ -579,47 +593,98 @@ export default function GeneratorPanel({
             >
               {conversation.length > 0 ? (
                 <div className="mx-auto flex w-full max-w-[520px] flex-col gap-4">
-                  {conversation.map((message, index) => (
-                    <div
-                      className={`group flex max-w-full items-start gap-1 ${
-                        message.role === "user"
-                          ? "ml-auto flex-row-reverse"
-                          : "mr-auto"
-                      }`}
-                      key={`${index}-${message.role}`}
-                    >
+                  {conversation.map((message, index) => {
+                    const matchesDatasetMessage = (
+                      name: string,
+                      count: number,
+                    ) =>
+                      message.content.includes(`${count} ${name} records`) ||
+                      (message.content.includes(`“${name}”`) &&
+                        message.content.includes(`${count} synthetic records`));
+                    const linkedArtifact =
+                      message.role === "assistant"
+                        ? (artifacts.find(
+                            (artifact) =>
+                              artifact.id === message.generatedArtifactId ||
+                              matchesDatasetMessage(
+                                artifact.name,
+                                artifact.count,
+                              ),
+                          ) ?? null)
+                        : null;
+                    const currentDatasetMatchesMessage =
+                      message.role === "assistant" &&
+                      dataset !== null &&
+                      matchesDatasetMessage(dataset.name, dataset.count);
+
+                    return (
                       <div
-                        className={`max-w-[min(88%,460px)] rounded-2xl border border-[#d1d5cd] px-2 py-1 text-[13px] leading-tight ${
+                        className={`group flex max-w-full items-start gap-1 ${
                           message.role === "user"
-                            ? "bg-gradient-to-r from-[#e7f2e4] to-[#f0ebf5] text-[#292c27]"
-                            : "rounded border-none bg-transparent text-[#30332d]"
+                            ? "ml-auto flex-row-reverse"
+                            : "mr-auto"
                         }`}
+                        key={`${index}-${message.role}`}
                       >
-                        {message.content}
-                      </div>
-                      <button
-                        aria-label={
-                          copiedMessageIndex === index
-                            ? "Message copied"
-                            : `Copy ${message.role} message`
-                        }
-                        className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                        onClick={() => void copyMessage(message.content, index)}
-                        title={
-                          copiedMessageIndex === index
-                            ? "Copied"
-                            : "Copy message"
-                        }
-                        type="button"
-                      >
-                        {copiedMessageIndex === index ? (
-                          <Check aria-hidden="true" className="size-3.5" />
-                        ) : (
-                          <Copy aria-hidden="true" className="size-3.5" />
+                        <div
+                          className={`max-w-[min(88%,460px)] rounded-2xl border border-[#d1d5cd] px-2 py-1 text-[13px] leading-tight ${
+                            message.role === "user"
+                              ? "bg-gradient-to-r from-[#e7f2e4] to-[#f0ebf5] text-[#292c27]"
+                              : "rounded border-none bg-transparent text-[#30332d]"
+                          }`}
+                        >
+                          {message.content}
+                        </div>
+                        <button
+                          aria-label={
+                            copiedMessageIndex === index
+                              ? "Message copied"
+                              : `Copy ${message.role} message`
+                          }
+                          className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                          onClick={() =>
+                            void copyMessage(message.content, index)
+                          }
+                          title={
+                            copiedMessageIndex === index
+                              ? "Copied"
+                              : "Copy message"
+                          }
+                          type="button"
+                        >
+                          {copiedMessageIndex === index ? (
+                            <Check aria-hidden="true" className="size-3.5" />
+                          ) : (
+                            <Copy aria-hidden="true" className="size-3.5" />
+                          )}
+                        </button>
+                        {(linkedArtifact || currentDatasetMatchesMessage) && (
+                          <button
+                            aria-label="Open generated dataset"
+                            className="mt-0.5 flex h-7 shrink-0 items-center justify-center gap-1 rounded-md bg-white px-2 text-[10px] font-medium text-[#55584f] shadow-xs transition hover:bg-[#f5f7f3] hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                            onClick={() => {
+                              if (linkedArtifact) {
+                                setDataset({
+                                  name: linkedArtifact.name,
+                                  fields: linkedArtifact.fields,
+                                  records: linkedArtifact.records,
+                                  count: linkedArtifact.count,
+                                  seed: linkedArtifact.seed,
+                                });
+                                setActiveArtifactId(linkedArtifact.id);
+                              }
+                              setView("table");
+                              setError("");
+                            }}
+                            title="Open generated dataset in Data panel"
+                            type="button"
+                          >
+                            <FileText aria-hidden="true" className="size-3.5" />
+                          </button>
                         )}
-                      </button>
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                   {generating && (
                     <div
                       aria-live="polite"
@@ -691,7 +756,9 @@ export default function GeneratorPanel({
                   </button>
                 </div>
                 <div
-                  className="relative flex px-1 gap-1 bg-white h-8 min-w-8 rounded-full justify-center cursor-pointer items-center text-[12px] text-[#696c64]"
+                  className={`relative flex h-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white px-1 text-[12px] text-[#696c64] motion-safe:transition-[width,gap] motion-safe:duration-200 motion-safe:ease-in-out ${
+                    showScrollToBottom ? "w-[4.25rem] gap-1" : "w-8 gap-0"
+                  }`}
                   ref={artifactFlyoutRef}
                 >
                   <button
@@ -723,7 +790,7 @@ export default function GeneratorPanel({
                     >
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <h2 className="text-[12px] font-semibold text-[#373a34]">
-                          Generated data
+                          Artifacts
                         </h2>
                         <span className="text-[10px] text-[#858880]">
                           {artifacts.length}
@@ -739,7 +806,7 @@ export default function GeneratorPanel({
                             <li key={artifact.id}>
                               <button
                                 aria-pressed={activeArtifactId === artifact.id}
-                                className={`flex w-full items-center gap-2 rounded-lg p-2 text-left transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780] ${
+                                className={`flex duration-300 transition-all w-full items-center gap-2 rounded-lg p-2 text-left transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780] ${
                                   activeArtifactId === artifact.id
                                     ? "bg-[#f1f5ef]"
                                     : ""
@@ -764,7 +831,7 @@ export default function GeneratorPanel({
                                   className="size-4 shrink-0 text-[#73786d]"
                                 />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-[11px] font-medium text-[#373a34]">
+                                  <span className="block capitalize truncate text-[11px] font-medium text-[#373a34]">
                                     {artifact.name}
                                   </span>
                                   <span className="block text-[10px] text-[#858880]">
@@ -781,41 +848,49 @@ export default function GeneratorPanel({
                       )}
                     </section>
                   )}
-                  {showScrollToBottom && (
-                    <>
-                      <span className="w-px h-3 bg-black/10" />
-                      <button
-                        aria-label="Scroll to latest message"
-                        className=" w-6 h-6 flex items-center justify-center rounded-full cursor-pointer text-[#20221e] "
-                        onClick={() =>
-                          conversationScrollRef.current?.scrollTo({
-                            top: conversationScrollRef.current.scrollHeight,
-                            behavior: "smooth",
-                          })
-                        }
-                        type="button"
-                        title="Scroll to latest message"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          height="18px"
-                          viewBox="48 -912 864 864"
-                          width="18px"
-                          fill="#999"
-                        >
-                          <path d="M444-768v438L243-531l-51 51 288 288 288-288-51-51-201 201v-438h-72Z" />
-                        </svg>
-                      </button>
-                    </>
-                  )}
+                  <span
+                    aria-hidden="true"
+                    className={`h-3 shrink-0 bg-black/10 transition-[width,opacity] duration-200 ${
+                      showScrollToBottom ? "w-px opacity-100" : "w-0 opacity-0"
+                    }`}
+                  />
+                  <button
+                    aria-label="Scroll to latest message"
+                    aria-hidden={!showScrollToBottom}
+                    className={`flex h-6 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full text-[#20221e] transition-[width,opacity,transform,background-color] duration-200 hover:bg-[#f5f7f3] ${
+                      showScrollToBottom
+                        ? "w-6 translate-x-0 opacity-100"
+                        : "w-0 translate-x-1 opacity-0"
+                    }`}
+                    disabled={!showScrollToBottom}
+                    tabIndex={showScrollToBottom ? 0 : -1}
+                    onClick={() =>
+                      conversationScrollRef.current?.scrollTo({
+                        top: conversationScrollRef.current.scrollHeight,
+                        behavior: "smooth",
+                      })
+                    }
+                    type="button"
+                    title="Scroll to latest message"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      height="18px"
+                      viewBox="48 -912 864 864"
+                      width="18px"
+                      fill="#999"
+                    >
+                      <path d="M444-768v438L243-531l-51 51 288 288 288-288-51-51-201 201v-438h-72Z" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <label className="sr-only hidden" htmlFor="dataset-prompt">
                 Describe the data to generate
               </label>
-              <div className="flex items-end gap-2 mx-auto max-w-120 rounded-2xl border border-[#d7dbd4] bg-white p-3 transition focus-within:border-[#aeb3a9]">
+              <div className="flex flex-col items-end gap-2 duration-300 transition-all mx-auto max-w-120 rounded-2xl border border-[#d7dbd4] bg-white p-3 focus-within:border-[#aeb3a9]">
                 <textarea
-                  className="max-h-32 min-h-[70px] min-w-0 flex-1 resize-none field-sizing-content bg-transparent px-1 py-1 text-[14px] leading-[1.5] font-medium outline-none placeholder:text-[#858880]"
+                  className="max-h-32 min-h-[40px] w-full min-w-0 flex-1 resize-none field-sizing-content bg-transparent px-1 py-1 text-[14px] leading-[1.5] font-medium outline-none placeholder:text-[#858880]"
                   disabled={generating}
                   id="dataset-prompt"
                   maxLength={maxPromptLength}
@@ -823,20 +898,21 @@ export default function GeneratorPanel({
                   placeholder="Describe the data or paste a schema or code snippet..."
                   required
                   value={prompt}
-                />
+                /><div className="flex items-center gap-2">
                 <button
                   aria-label="Attach a file (not implemented)"
                   className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white cursor-pointer text-white transition hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
+
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     height="18px"
-                    viewBox="48 -912 864 864"
+                    viewBox="0 -960 960 960"
                     width="18px"
                     fill="#999"
-                    className="rotate-[45deg]"
+                    className="-rotate-45"
                   >
-                    <path d="M600-504v-216h72v216h-72ZM432-243q-32-8-52-35t-20-62v-380h72v477Zm24 147q-91 0-153.5-65.5T240-319v-389q0-65 45.5-110.5T396-864q66 0 111 48t45 115v305h-72v-312q0-35-24.5-59.5T396-792q-35 0-59.5 25.5T312-706v394q0 60 42 101.5T456-168q32 1 60-13t48-37v93q-24 14-51.5 21.5T456-96Zm180-48v-108H528v-72h108v-108h72v108h108v72H708v108h-72Z" />
+                    <path d="M330-240q-104 0-177-73T80-490q0-104 73-177t177-73h370q75 0 127.5 52.5T880-560q0 75-52.5 127.5T700-380H350q-46 0-78-32t-32-78q0-46 32-78t78-32h370v80H350q-13 0-21.5 8.5T320-490q0 13 8.5 21.5T350-460h350q42-1 71-29.5t29-70.5q0-42-29-71t-71-29H330q-71-1-120.5 49T160-490q0 70 49.5 119T330-320h390v80H330Z" />
                   </svg>
                 </button>
                 <button
@@ -855,6 +931,8 @@ export default function GeneratorPanel({
                   )}
                 </button>
               </div>
+              </div>
+
               <div>
                 <p className="mt-2 flex text-center mx-auto max-w-fit text-[10px] font-semibold text-[#999]">
                   Ai can make mistakes. Review the generated data before using

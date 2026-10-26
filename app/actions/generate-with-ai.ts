@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { randomInt } from "node:crypto";
 import { decryptProviderKey } from "@/lib/ai/provider-credentials";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   extractOpenRouterContent,
@@ -194,7 +195,30 @@ export async function generateWithAi(
   }[] = [];
   const providerKeys = new Map<"claude" | "openai", string>();
   let providerReservationId: string | null = null;
+  let providerAdmin: ReturnType<typeof createSupabaseAdminClient> | null = null;
   let modelNotice: string | undefined;
+  const releaseProviderReservation = async () => {
+    if (!providerReservationId) return;
+    if (!providerAdmin) {
+      console.error("Unable to release Pro AI provider reservation: admin client unavailable.");
+      return;
+    }
+
+    try {
+      const { error } = await providerAdmin.rpc(
+        "release_pro_ai_provider_slot_for_user",
+        {
+          p_user_id: user.id,
+          p_reservation_id: providerReservationId,
+        },
+      );
+      if (error) {
+        console.error("Unable to release Pro AI provider reservation", error);
+      }
+    } catch (error) {
+      console.error("Unable to release Pro AI provider reservation", error);
+    }
+  };
 
   if (requestedModel !== "qwen") {
     const { data: subscription, error: subscriptionError } = await supabase
@@ -212,6 +236,14 @@ export async function generateWithAi(
       Date.parse(subscription.current_period_end) <= Date.now()
     ) {
       return { error: "Claude and OpenAI models require an active Pro plan." };
+    }
+
+    try {
+      providerAdmin = createSupabaseAdminClient();
+    } catch {
+      return {
+        error: "Secure provider routing is unavailable. Please try again later.",
+      };
     }
 
     if (funding === "included") {
@@ -299,9 +331,16 @@ export async function generateWithAi(
     }
 
     if (!modelNotice) {
-      const { data: slotData, error: slotError } = await supabase.rpc(
-        "reserve_pro_ai_provider_slot",
+      const admin = providerAdmin;
+      if (!admin) {
+        return {
+          error: "Secure provider routing is unavailable. Please try again later.",
+        };
+      }
+      const { data: slotData, error: slotError } = await admin.rpc(
+        "reserve_pro_ai_provider_slot_for_user",
         {
+          p_user_id: user.id,
           p_requested_provider: requestedProvider,
           p_available_providers: availableModels,
         },
@@ -340,16 +379,7 @@ export async function generateWithAi(
               decryptProviderKey(credential.encrypted_api_key),
             );
           } catch {
-            const { error: releaseError } = await supabase.rpc(
-              "release_pro_ai_provider_slot",
-              { p_reservation_id: providerReservationId },
-            );
-            if (releaseError) {
-              console.error(
-                "Unable to release Pro AI provider reservation",
-                releaseError,
-              );
-            }
+            await releaseProviderReservation();
             return {
               error:
                 "Your saved provider key could not be decrypted. Save it again or contact support.",
@@ -375,18 +405,7 @@ export async function generateWithAi(
   }
 
   if (!apiKey) {
-    if (providerReservationId) {
-      const { error: releaseError } = await supabase.rpc(
-        "release_pro_ai_provider_slot",
-        { p_reservation_id: providerReservationId },
-      );
-      if (releaseError) {
-        console.error(
-          "Unable to release Pro AI provider reservation",
-          releaseError,
-        );
-      }
-    }
+    await releaseProviderReservation();
     return { error: "The AI provider key is not configured." };
   }
 
@@ -409,25 +428,7 @@ export async function generateWithAi(
     }
     return { error: "Couldn't reach the AI service. Please try again." };
   } finally {
-    if (providerReservationId) {
-      try {
-        const { error: releaseError } = await supabase.rpc(
-          "release_pro_ai_provider_slot",
-          { p_reservation_id: providerReservationId },
-        );
-        if (releaseError) {
-          console.error(
-            "Unable to release Pro AI provider reservation",
-            releaseError,
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Unable to release Pro AI provider reservation",
-          error,
-        );
-      }
-    }
+    await releaseProviderReservation();
   }
 
   if (!response.ok) {

@@ -52,6 +52,10 @@ body {
   font-family: var(--font-geist-sans), var(--font-helvetica-now), sans-serif;
 }
 
+button {
+  cursor: pointer;
+}
+
 .workspace-toolbar-button {
   display: flex;
   width: 16px;
