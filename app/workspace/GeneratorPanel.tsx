@@ -582,8 +582,7 @@ export default function GeneratorPanel({
                 <div className="mx-auto h-full justify-center items-center flex flex-col mt-[min(10vh,90px)] max-w-[400px] text-center">
                   <p className="geist hidde text-center mx-auto max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
                     Describe the records and fields, or paste a JSON,
-                    TypeScript, SQL, or Prisma schema. Pasted code is read as
-                    data structure and never executed.
+                    TypeScript, SQL, or Prisma schema.
                   </p>
 
                   <div className="mt-5 hidden flex-col gap-1">
