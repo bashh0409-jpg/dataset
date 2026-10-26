@@ -2,6 +2,7 @@
 
 import {
   ArrowUp,
+  FileText,
   Plus,
   Check,
   Copy,
@@ -20,7 +21,9 @@ import {
 } from "react";
 import {
   getAiConversation,
+  saveAiGeneratedArtifact,
   saveAiConversation,
+  type AiGeneratedArtifact,
   type AiConversationSummary,
 } from "@/app/actions/ai-conversations";
 import { generateWithAi } from "@/app/actions/generate-with-ai";
@@ -86,7 +89,7 @@ const examples = [
 
 type GeneratorPanelProps = {
   isPro: boolean;
-  model: "auto" | "claude" | "openai";
+  model: "qwen" | "auto" | "claude" | "openai";
   requestedConversationId: string | null;
   onConversationOpened: (id: string) => void;
   onChatSaved: (conversation: AiConversationSummary) => void;
@@ -109,6 +112,9 @@ export default function GeneratorPanel({
   const [manualFields, setManualFields] = useState(defaultManualFields);
   const [nextManualFieldId, setNextManualFieldId] = useState(4);
   const [dataset, setDataset] = useState<GeneratedDataset | null>(null);
+  const [artifacts, setArtifacts] = useState<AiGeneratedArtifact[]>([]);
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const [artifactFlyoutOpen, setArtifactFlyoutOpen] = useState(false);
   const [view, setView] = useState<DataView>("table");
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -120,6 +126,7 @@ export default function GeneratorPanel({
   );
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const conversationScrollRef = useRef<HTMLDivElement>(null);
+  const artifactFlyoutRef = useRef<HTMLDivElement>(null);
 
   const generatedCsv = dataset
     ? recordsToCsv(dataset.fields, dataset.records)
@@ -165,6 +172,29 @@ export default function GeneratorPanel({
   }, [conversation, updateScrollToBottomVisibility]);
 
   useEffect(() => {
+    if (!artifactFlyoutOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !artifactFlyoutRef.current?.contains(event.target)
+      ) {
+        setArtifactFlyoutOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setArtifactFlyoutOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [artifactFlyoutOpen]);
+
+  useEffect(() => {
     if (!requestedConversationId) return;
     let active = true;
 
@@ -177,8 +207,11 @@ export default function GeneratorPanel({
         }
         setConversationId(result.data.id);
         setConversation(result.data.messages);
+        setArtifacts(result.data.artifacts);
+        setArtifactFlyoutOpen(false);
         setPrompt("");
         setDataset(null);
+        setActiveArtifactId(null);
         setView("table");
         setError("");
         setSaveError("");
@@ -248,6 +281,8 @@ export default function GeneratorPanel({
       count: request.count,
       seed: request.seed,
     });
+    setArtifacts([]);
+    setActiveArtifactId(null);
     setConversation([]);
     setConversationId(null);
     setView("table");
@@ -305,7 +340,12 @@ export default function GeneratorPanel({
       if ("question" in result) {
         const nextMessages = [
           ...messages,
-          { role: "assistant" as const, content: result.question },
+          {
+            role: "assistant" as const,
+            content: result.modelNotice
+              ? `${result.modelNotice} ${result.question}`
+              : result.question,
+          },
         ];
         setConversation(nextMessages);
         await persistConversation(
@@ -322,11 +362,26 @@ export default function GeneratorPanel({
         ...messages,
         {
           role: "assistant" as const,
-          content: `Generated ${result.data.count} ${result.data.name} records. You can view or export them on the right.`,
+          content: `${result.modelNotice ? `${result.modelNotice} ` : ""}Generated ${result.data.count} ${result.data.name} records. You can view or export them on the right.`,
         },
       ];
       setConversation(nextMessages);
-      await persistConversation(nextMessages, savedId ?? conversationId);
+      const persistedId = await persistConversation(
+        nextMessages,
+        savedId ?? conversationId,
+      );
+      if (persistedId) {
+        const artifactResult = await saveAiGeneratedArtifact({
+          conversationId: persistedId,
+          ...result.data,
+        });
+        if ("error" in artifactResult) {
+          setSaveError(artifactResult.error);
+        } else {
+          setArtifacts((current) => [...current, artifactResult.data]);
+          setActiveArtifactId(artifactResult.data.id);
+        }
+      }
     } catch {
       setError("A network error occurred. Please try again.");
     } finally {
@@ -375,7 +430,7 @@ export default function GeneratorPanel({
   };
 
   return (
-    <div className="flex h-full tracking-tight  min-h-0 flex-col bg-[#f9fbf7] pt-[36px] geist text-[13px] font-medium text-[#242620]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f9fbf7] pt-[36px] geist text-[13px] font-medium tracking-tight text-[#242620]">
       <header className="grid mt-5 shrink-0 grid-cols-2 items-center">
         <div className="flex h-full items-center ">
           <div
@@ -503,11 +558,11 @@ export default function GeneratorPanel({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
+      <div className="grid h-0 min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden md:grid-cols-2 md:grid-rows-1">
         {mode === "agent" ? (
           <section
             aria-label="AI data prompt"
-            className="flex min-h-[360px] min-w-0 flex-col bg-[#f1f5ef]"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#f1f5ef]"
           >
             {saveError && (
               <p
@@ -518,7 +573,7 @@ export default function GeneratorPanel({
               </p>
             )}
             <div
-              className="flex-1 overflow-y-auto px-8 py-8 max-sm:px-4"
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-8 py-8 max-sm:px-4"
               onScroll={updateScrollToBottomVisibility}
               ref={conversationScrollRef}
             >
@@ -635,9 +690,18 @@ export default function GeneratorPanel({
                     </svg>
                   </button>
                 </div>
-                <div className="flex px-1 gap-1  bg-white h-8 min-w-8 rounded-full justify-center cursor-pointer flex w- items-center  text-[12px] text-[#696c64] ">
+                <div
+                  className="relative flex px-1 gap-1 bg-white h-8 min-w-8 rounded-full justify-center cursor-pointer items-center text-[12px] text-[#696c64]"
+                  ref={artifactFlyoutRef}
+                >
                   <button
+                    aria-controls="generated-data-flyout"
+                    aria-expanded={artifactFlyoutOpen}
+                    aria-haspopup="dialog"
+                    aria-label="Generated data"
                     className=" w-6 h-6 flex items-center justify-center rounded-full cursor-pointer  text-[#20221e]"
+                    onClick={() => setArtifactFlyoutOpen((isOpen) => !isOpen)}
+                    title="Generated data"
                     type="button"
                   >
                     <svg
@@ -650,6 +714,73 @@ export default function GeneratorPanel({
                       <path d="M288-600v-72h528v72H288Zm0 156v-72h528v72H288Zm0 156v-72h528v72H288ZM180-600q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-636q0 14-10.35 25T180-600Zm0 156q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-480q0 14-10.35 25T180-444Zm0 156q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-324q0 14-10.35 25T180-288Z" />
                     </svg>
                   </button>
+                  {artifactFlyoutOpen && (
+                    <section
+                      aria-label="Generated data"
+                      className="absolute bottom-[calc(100%+10px)] left-0 z-40 max-h-[min(60vh,420px)] w-[min(340px,calc(100vw-48px))] overflow-y-auto rounded-xl border border-[#e2e5df] bg-white p-3 text-left shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
+                      id="generated-data-flyout"
+                      role="dialog"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h2 className="text-[12px] font-semibold text-[#373a34]">
+                          Generated data
+                        </h2>
+                        <span className="text-[10px] text-[#858880]">
+                          {artifacts.length}
+                        </span>
+                      </div>
+                      {artifacts.length === 0 ? (
+                        <p className="px-1 py-3 text-[11px] leading-4 text-[#858880]">
+                          Generated datasets from this chat will appear here.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {artifacts.map((artifact) => (
+                            <li key={artifact.id}>
+                              <button
+                                aria-pressed={activeArtifactId === artifact.id}
+                                className={`flex w-full items-center gap-2 rounded-lg p-2 text-left transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780] ${
+                                  activeArtifactId === artifact.id
+                                    ? "bg-[#f1f5ef]"
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  setDataset({
+                                    name: artifact.name,
+                                    fields: artifact.fields,
+                                    records: artifact.records,
+                                    count: artifact.count,
+                                    seed: artifact.seed,
+                                  });
+                                  setActiveArtifactId(artifact.id);
+                                  setView("table");
+                                  setError("");
+                                  setArtifactFlyoutOpen(false);
+                                }}
+                                type="button"
+                              >
+                                <FileText
+                                  aria-hidden="true"
+                                  className="size-4 shrink-0 text-[#73786d]"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[11px] font-medium text-[#373a34]">
+                                    {artifact.name}
+                                  </span>
+                                  <span className="block text-[10px] text-[#858880]">
+                                    {artifact.count} records
+                                  </span>
+                                </span>
+                                <span className="shrink-0 text-[10px] text-[#777a72]">
+                                  Open
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
                   {showScrollToBottom && (
                     <>
                       <span className="w-px h-3 bg-black/10" />
@@ -724,19 +855,21 @@ export default function GeneratorPanel({
                   )}
                 </button>
               </div>
-              <p className="mt-2 flex mx-auto max-w-120 justify-between text-[10px] font-medium text-[#999]">
-                <span>{generating ? "Generating…" : "Qwen3.7 Plus"}</span>
-              </p>
-              
+              <div>
+                <p className="mt-2 flex text-center mx-auto max-w-fit text-[10px] font-semibold text-[#999]">
+                  Ai can make mistakes. Review the generated data before using
+                  it.
+                </p>
+              </div>
             </form>
           </section>
         ) : (
           <section
             aria-label="Manual data configuration"
-            className="flex min-h-[360px] min-w-0 flex-col bg-[#f1f5ef]"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#f1f5ef]"
           >
             <form
-              className="flex-1 overflow-y-auto px-6 py-6 max-sm:px-4"
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 max-sm:px-4"
               onSubmit={generateManual}
             >
               <div className="mx-auto w-full max-w-[480px]">
@@ -888,9 +1021,9 @@ export default function GeneratorPanel({
 
         <section
           aria-label="Generated data"
-          className="flex min-h-[360px] min-w-0 flex-col bg-white"
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white"
         >
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
             {!dataset ? (
               <div className="flex h-full min-h-[300px] items-center justify-center px-6 text-center">
                 <p className="max-w-[260px] text-[xs leading-tight font-medium text-[#777a72]">

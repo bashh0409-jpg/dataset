@@ -1,9 +1,14 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 
 export default function SmoothScroll() {
+  const pathname = usePathname()
+
   useEffect(() => {
+    if (pathname.startsWith('/workspace')) return
+
     let cancelled = false
     let destroy: (() => void) | undefined
 
@@ -22,7 +27,7 @@ export default function SmoothScroll() {
       cancelled = true
       destroy?.()
     }
-  }, [])
+  }, [pathname])
 
   return null
 }

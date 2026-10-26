@@ -57,7 +57,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <SmoothScroll />
+        <Suspense fallback={null}>
+          <SmoothScroll />
+        </Suspense>
         <Suspense fallback={null}>
           <Navbar />
         </Suspense>

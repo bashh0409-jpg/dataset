@@ -10,9 +10,9 @@ import {
 type WorkspaceToolbarProps = {
   billingStatusError: string;
   isPro: boolean;
-  model: "auto" | "claude" | "openai";
+  model: "qwen" | "auto" | "claude" | "openai";
   workspaceName: string;
-  onModelChange: (model: "auto" | "claude" | "openai") => void;
+  onModelChange: (model: "qwen" | "auto" | "claude" | "openai") => void;
   onManage: () => void;
   onInvite: () => void;
 };
@@ -46,8 +46,10 @@ export default function WorkspaceToolbar({
           <select
             aria-label="AI model"
             className={`${buttonClass} cursor-pointer appearance-none pr-6`}
-            disabled={!isPro}
             onChange={(event) => {
+              if (event.currentTarget.value === "qwen") {
+                onModelChange("qwen");
+              }
               if (
                 event.currentTarget.value === "auto" ||
                 event.currentTarget.value === "claude" ||
@@ -56,21 +58,18 @@ export default function WorkspaceToolbar({
                 onModelChange(event.currentTarget.value);
               }
             }}
-            title={
-              isPro
-                ? "Choose an AI model"
-                : "Free plan uses the included free model"
-            }
-            value={isPro ? model : "free"}
+            title="Choose an AI model"
+            value={isPro ? model : "qwen"}
           >
             {isPro ? (
               <>
+                <option value="qwen">Free model</option>
                 <option value="auto">Auto</option>
                 <option value="claude">Claude</option>
                 <option value="openai">OpenAI</option>
               </>
             ) : (
-              <option value="free">Free model</option>
+              <option value="qwen">Free model</option>
             )}
           </select>
           <ChevronDown

@@ -29,6 +29,7 @@ const generationInputSchema = z.object({
 type GenerateWithAiResult =
   | {
       question: string;
+      modelNotice?: string;
       proAiUsage?: {
         used: number;
         limit: 50;
@@ -42,6 +43,7 @@ type GenerateWithAiResult =
         count: number;
         seed: number;
       };
+      modelNotice?: string;
       proAiUsage?: {
         used: number;
         limit: 50;
@@ -176,11 +178,25 @@ export async function generateWithAi(
   }
 
   const { funding } = parsedInput.data;
-  let model = parsedInput.data.model;
+  const requestedModel = parsedInput.data.model;
+  const requestedProvider =
+    requestedModel === "claude" || requestedModel === "openai"
+      ? requestedModel
+      : null;
+  let model: "qwen" | "claude" | "openai" =
+    requestedModel === "auto" ? "claude" : requestedModel;
   let proAiUsage: { used: number; limit: 50 } | undefined;
   let apiKey: string | null = null;
+  let availableModels: ("claude" | "openai")[] = [];
+  let byokCredentials: {
+    provider: string;
+    encrypted_api_key: string;
+  }[] = [];
+  const providerKeys = new Map<"claude" | "openai", string>();
+  let providerReservationId: string | null = null;
+  let modelNotice: string | undefined;
 
-  if (model !== "qwen") {
+  if (requestedModel !== "qwen") {
     const { data: subscription, error: subscriptionError } = await supabase
       .from("plan_subscriptions")
       .select("status, current_period_start, current_period_end")
@@ -198,97 +214,77 @@ export async function generateWithAi(
       return { error: "Claude and OpenAI models require an active Pro plan." };
     }
 
-    if (model === "auto") {
-      let availableModels: ("claude" | "openai")[];
-      if (funding === "included") {
-        availableModels = [
-          ...(process.env.ANTHROPIC_API_KEY ? ["claude" as const] : []),
-          ...(process.env.OPENAI_API_KEY ? ["openai" as const] : []),
-        ];
-      } else {
-        const { data: credentials, error: credentialsError } = await supabase
-          .from("ai_provider_credentials")
-          .select("provider")
-          .eq("user_id", user.id);
-
-        if (credentialsError) {
-          return { error: "Unable to load your saved provider keys." };
-        }
-        availableModels = credentials.flatMap((credential) =>
-          credential.provider === "anthropic"
-            ? ["claude" as const]
-            : credential.provider === "openai"
-              ? ["openai" as const]
-              : [],
-        );
-      }
-
-      if (availableModels.length === 0) {
-        return {
-          error:
-            funding === "included"
-              ? "Auto requires at least one configured Claude or OpenAI provider key."
-              : "Add a Claude or OpenAI API key in Pro settings to use Auto.",
-        };
-      }
-      model = availableModels[randomInt(availableModels.length)];
-    }
-
     if (funding === "included") {
-      apiKey =
-        model === "claude"
-          ? (process.env.ANTHROPIC_API_KEY ?? null)
-          : (process.env.OPENAI_API_KEY ?? null);
-      if (!apiKey) {
+      availableModels = [
+        ...(process.env.ANTHROPIC_API_KEY ? ["claude" as const] : []),
+        ...(process.env.OPENAI_API_KEY ? ["openai" as const] : []),
+      ];
+      if (availableModels.length === 0) {
         return {
           error:
             "Included Claude/OpenAI access is not configured. Add the provider key on the server or use your own key.",
         };
       }
+      if (
+        requestedProvider !== null &&
+        !availableModels.includes(requestedProvider)
+      ) {
+        return {
+          error: `The ${requestedProvider === "claude" ? "Claude" : "OpenAI"} provider is not configured.`,
+        };
+      }
     } else {
-      const provider = model === "claude" ? "anthropic" : "openai";
-      const { data: credential, error: credentialError } = await supabase
+      const { data: credentials, error: credentialError } = await supabase
         .from("ai_provider_credentials")
-        .select("encrypted_api_key")
-        .eq("user_id", user.id)
-        .eq("provider", provider)
-        .maybeSingle();
+        .select("provider, encrypted_api_key")
+        .eq("user_id", user.id);
 
       if (credentialError) {
         return { error: "Unable to load your saved provider key." };
       }
-      if (!credential) {
-        return {
-          error: `Add your ${model === "claude" ? "Claude" : "OpenAI"} key in Pro settings first.`,
-        };
-      }
-      try {
-        apiKey = decryptProviderKey(credential.encrypted_api_key);
-      } catch {
+      byokCredentials = credentials;
+      availableModels = credentials.flatMap((credential) =>
+        credential.provider === "anthropic"
+          ? ["claude" as const]
+          : credential.provider === "openai"
+            ? ["openai" as const]
+            : [],
+      );
+      if (availableModels.length === 0) {
         return {
           error:
-            "Your saved provider key could not be decrypted. Save it again or contact support.",
+            "Add a Claude or OpenAI API key in Pro settings to use Auto.",
+        };
+      }
+
+      if (
+        requestedProvider !== null &&
+        !availableModels.includes(requestedProvider)
+      ) {
+        return {
+          error: `Add your ${requestedProvider === "claude" ? "Claude" : "OpenAI"} key in Pro settings first.`,
         };
       }
     }
 
-    if (funding === "included") {
-      const { data: reservation, error: reservationError } =
-        await supabase.rpc("reserve_pro_ai_request");
-
-      if (reservationError) {
-        return { error: "Unable to reserve Pro AI usage. Please try again." };
-      }
-      if (reservation === "limit_reached") {
-        return {
-          error:
-            "You've used all 50 included Pro AI requests this billing period. Add your own provider key or try again after your plan renews.",
-        };
-      }
-      if (reservation !== "allowed") {
-        return { error: "An active Pro plan is required for this model." };
-      }
-
+    const { data: reservation, error: reservationError } = await supabase.rpc(
+      "reserve_pro_ai_premium_request",
+      { p_included: funding === "included" },
+    );
+    if (reservationError) {
+      return {
+        error: "Unable to verify your Pro AI usage limit. Please try again.",
+      };
+    }
+    if (reservation === "rate_limited") {
+      modelNotice =
+        "You've reached the Pro model limit of 20 requests per 3 hours, so this request used the Free model instead.";
+    } else if (reservation === "monthly_limit") {
+      modelNotice =
+        "Your included Pro model allowance is used up, so this request used the Free model instead.";
+    } else if (reservation !== "allowed") {
+      return { error: "Unable to reserve Pro AI usage. Please try again." };
+    } else if (funding === "included") {
       const { count, error: usageError } = await supabase
         .from("usage_events")
         .select("id", { count: "exact", head: true })
@@ -301,11 +297,73 @@ export async function generateWithAi(
       }
       proAiUsage = { used: count ?? 1, limit: 50 };
     }
+
+    if (!modelNotice) {
+      const { data: slotData, error: slotError } = await supabase.rpc(
+        "reserve_pro_ai_provider_slot",
+        {
+          p_requested_provider: requestedProvider,
+          p_available_providers: availableModels,
+        },
+      );
+      const parsedSlot = z
+        .array(
+          z.object({
+            reservation_id: z.string().uuid(),
+            provider: z.enum(["claude", "openai"]),
+          }),
+        )
+        .safeParse(slotData);
+      const slot = parsedSlot.success ? parsedSlot.data[0] : undefined;
+      if (slotError || !slot) {
+        return {
+          error: "Unable to select an AI provider. Please try again.",
+        };
+      }
+      model = slot.provider;
+      providerReservationId = slot.reservation_id;
+
+      if (funding === "included") {
+        apiKey =
+          model === "claude"
+            ? (process.env.ANTHROPIC_API_KEY ?? null)
+            : (process.env.OPENAI_API_KEY ?? null);
+      } else {
+        const provider = model === "claude" ? "anthropic" : "openai";
+        const credential = byokCredentials.find(
+          (candidate) => candidate.provider === provider,
+        );
+        if (credential) {
+          try {
+            providerKeys.set(
+              model,
+              decryptProviderKey(credential.encrypted_api_key),
+            );
+          } catch {
+            const { error: releaseError } = await supabase.rpc(
+              "release_pro_ai_provider_slot",
+              { p_reservation_id: providerReservationId },
+            );
+            if (releaseError) {
+              console.error(
+                "Unable to release Pro AI provider reservation",
+                releaseError,
+              );
+            }
+            return {
+              error:
+                "Your saved provider key could not be decrypted. Save it again or contact support.",
+            };
+          }
+        }
+        apiKey = providerKeys.get(model) ?? null;
+      }
+    } else {
+      model = "qwen";
+    }
   }
 
   const timeout = AbortSignal.timeout(55_000);
-  let response: Response;
-  let isClaude = false;
   if (model === "qwen") {
     apiKey = process.env.OPENROUTER_API_KEY ?? null;
     if (!apiKey) {
@@ -317,9 +375,24 @@ export async function generateWithAi(
   }
 
   if (!apiKey) {
+    if (providerReservationId) {
+      const { error: releaseError } = await supabase.rpc(
+        "release_pro_ai_provider_slot",
+        { p_reservation_id: providerReservationId },
+      );
+      if (releaseError) {
+        console.error(
+          "Unable to release Pro AI provider reservation",
+          releaseError,
+        );
+      }
+    }
     return { error: "The AI provider key is not configured." };
   }
 
+  let response: Response;
+  let responseBody: string;
+  let isClaude = false;
   try {
     const completion = await requestProviderCompletion(
       model,
@@ -329,11 +402,32 @@ export async function generateWithAi(
     );
     response = completion.response;
     isClaude = completion.isClaude;
+    responseBody = await response.text();
   } catch (error) {
     if (timeout.aborted || (error instanceof Error && error.name === "TimeoutError")) {
       return { error: "The AI request timed out. Please try again." };
     }
     return { error: "Couldn't reach the AI service. Please try again." };
+  } finally {
+    if (providerReservationId) {
+      try {
+        const { error: releaseError } = await supabase.rpc(
+          "release_pro_ai_provider_slot",
+          { p_reservation_id: providerReservationId },
+        );
+        if (releaseError) {
+          console.error(
+            "Unable to release Pro AI provider reservation",
+            releaseError,
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Unable to release Pro AI provider reservation",
+          error,
+        );
+      }
+    }
   }
 
   if (!response.ok) {
@@ -367,21 +461,6 @@ export async function generateWithAi(
     }
     return {
       error: "The AI service couldn't generate a schema. Please try again.",
-    };
-  }
-
-  let responseBody: string;
-  try {
-    responseBody = await response.text();
-  } catch {
-    if (timeout.aborted) {
-      return {
-        error:
-          "Qwen3.7 Plus took too long to finish. Please try again with a shorter request.",
-      };
-    }
-    return {
-      error: `The OpenRouter response was interrupted (HTTP ${response.status}). Please retry the request.`,
     };
   }
 
@@ -436,7 +515,8 @@ export async function generateWithAi(
     if (result.status === "clarification") {
       return {
         question: result.question,
-        ...(proAiUsage ? { proAiUsage } : {}),
+          ...(modelNotice ? { modelNotice } : {}),
+          ...(proAiUsage ? { proAiUsage } : {}),
       };
     }
     const request = result.request;
@@ -448,6 +528,7 @@ export async function generateWithAi(
         count: request.count,
         seed: request.seed,
       },
+      ...(modelNotice ? { modelNotice } : {}),
       ...(proAiUsage ? { proAiUsage } : {}),
     };
   } catch {

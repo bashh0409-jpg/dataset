@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -21,6 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   listAiConversations,
+  deleteAiConversation,
   renameAiConversation,
   setAiConversationArchived,
   setAiConversationPinned,
@@ -40,7 +42,7 @@ type Workspace = {
   name: string;
 };
 
-type AiModel = "auto" | "claude" | "openai";
+type AiModel = "qwen" | "auto" | "claude" | "openai";
 
 type WorkspaceShellProps = {
   displayName: string;
@@ -158,7 +160,7 @@ export default function WorkspaceShell({
 }: WorkspaceShellProps) {
   const router = useRouter();
   const [activeView, setActiveView] = useState<WorkspaceView>("generate");
-  const [aiModel, setAiModel] = useState<AiModel>("auto");
+  const [aiModel, setAiModel] = useState<AiModel>("qwen");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
@@ -186,6 +188,19 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const restoreFrame = window.requestAnimationFrame(() => {
+      const conversationId = window.localStorage.getItem(
+        "synthetic.activeConversationId",
+      );
+      if (!conversationId) return;
+      setRequestedConversationId(conversationId);
+      setActiveConversationId(conversationId);
+    });
+
+    return () => window.cancelAnimationFrame(restoreFrame);
+  }, []);
 
   useEffect(() => {
     if (
@@ -258,6 +273,10 @@ export default function WorkspaceShell({
         )
         .slice(0, 50),
     );
+    window.localStorage.setItem(
+      "synthetic.activeConversationId",
+      conversation.id,
+    );
     setActiveConversationId(conversation.id);
     setConversationError("");
   }, []);
@@ -296,6 +315,7 @@ export default function WorkspaceShell({
   };
 
   const startNewChat = () => {
+    window.localStorage.removeItem("synthetic.activeConversationId");
     setRequestedConversationId(null);
     setActiveConversationId(null);
     setNewConversationToken((token) => token + 1);
@@ -304,6 +324,7 @@ export default function WorkspaceShell({
   };
 
   const openSavedChat = (id: string) => {
+    window.localStorage.setItem("synthetic.activeConversationId", id);
     setRequestedConversationId(id);
     setActiveConversationId(id);
     setActiveView("generate");
@@ -326,6 +347,43 @@ export default function WorkspaceShell({
       setOpenChatMenuId(null);
     } catch {
       setConversationError("A network error occurred while updating the chat.");
+    } finally {
+      setUpdatingChatId(null);
+    }
+  };
+
+  const removeChat = async (chat: AiConversationSummary) => {
+    if (
+      !window.confirm(
+        `Delete "${chat.title}" and its generated data? This cannot be undone.`,
+      )
+    ) {
+      setOpenChatMenuId(null);
+      return;
+    }
+
+    setUpdatingChatId(chat.id);
+    setConversationError("");
+    try {
+      const result = await deleteAiConversation(chat.id);
+      if ("error" in result) {
+        setConversationError(result.error);
+        return;
+      }
+
+      setSavedConversations((current) =>
+        current.filter((savedChat) => savedChat.id !== result.data.id),
+      );
+      setOpenChatMenuId(null);
+      if (activeConversationId === result.data.id) {
+        window.localStorage.removeItem("synthetic.activeConversationId");
+        setActiveConversationId(null);
+        setRequestedConversationId(null);
+        setNewConversationToken((token) => token + 1);
+        setConversationError("");
+      }
+    } catch {
+      setConversationError("A network error occurred while deleting the chat.");
     } finally {
       setUpdatingChatId(null);
     }
@@ -497,6 +555,16 @@ export default function WorkspaceShell({
               >
                 <Archive aria-hidden="true" className="size-3.5" />
                 {chat.archived ? "Unarchive" : "Archive"}
+              </button>
+              <button
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#a64239] hover:bg-[#fff4f2] disabled:opacity-50"
+                disabled={updatingChatId === chat.id}
+                onClick={() => void removeChat(chat)}
+                role="menuitem"
+                type="button"
+              >
+                <Trash2 aria-hidden="true" className="size-3.5" />
+                Delete
               </button>
             </div>
           )}
@@ -798,7 +866,7 @@ export default function WorkspaceShell({
             <DeveloperPanel initialKeys={apiKeys} />
           </div>
         ) : activeView === "generate" ? (
-          <div className="absolute inset-0 overflow-y-auto">
+          <div className="absolute inset-0 min-h-0 overflow-hidden">
             <GeneratorPanel
               key={newConversationToken}
               isPro={isPro}
