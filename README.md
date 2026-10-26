@@ -47,7 +47,7 @@ After OAuth sign-in, new users complete onboarding by adding their name and crea
 
 ## Data generator
 
-The workspace **Generate** section uses OpenRouter's `qwen/qwen3.7-plus` model to turn a natural-language description into a validated data schema, then generates up to 500 synthetic records in the app. Add a server-only `OPENROUTER_API_KEY` to enable AI schema generation. OpenRouter account credits, model availability, and pricing may apply. The generated data can be viewed as a table, JSON, or CSV, and JSON/CSV can be copied or downloaded. A seed reproduces the same generated values for the same schema. Generated records are held in the browser and are not persisted.
+The workspace **Generate** section supports AI-assisted generation through OpenRouter's `qwen/qwen3.7-plus` model and manual generation without an AI request. In manual mode, configure the dataset name, fields, field types, enum options, and record count; up to 500 records are generated locally. In Agent mode, describe the data and the AI asks for a record count if one is missing. Agent conversations are saved privately to the signed-in user's account and can be reopened, renamed, pinned, unpinned, archived, or unarchived from the workspace sidebar. Generated records are held in the browser and are not persisted. Apply the `20261026170000_create_ai_conversations.sql`, `20261026171000_add_ai_conversation_pinning.sql`, and `20261026172000_add_ai_conversation_archiving.sql` migrations to enable chat history and management. Add a server-only `OPENROUTER_API_KEY` to enable AI generation. OpenRouter account credits, model availability, and pricing may apply. Results can be viewed as a table, JSON, or CSV, and JSON/CSV can be copied or downloaded.
 
 ### Workspace invitation emails
 

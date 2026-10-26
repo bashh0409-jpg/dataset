@@ -1,50 +1,161 @@
 import { describe, expect, it } from "vitest";
-import { parseAiSchema } from "../lib/generator/ai-schema";
+import {
+  extractOpenRouterContent,
+  parseAiSchema,
+} from "../lib/generator/ai-schema";
+
+describe("OpenRouter response parsing", () => {
+  it("extracts text from the standard completion response", () => {
+    expect(
+      extractOpenRouterContent({
+        choices: [{ message: { content: '{"status":"clarification"}' } }],
+      }),
+    ).toEqual({
+      status: "content",
+      content: '{"status":"clarification"}',
+    });
+  });
+
+  it("joins text content parts returned by compatible providers", () => {
+    expect(
+      extractOpenRouterContent({
+        choices: [
+          {
+            message: {
+              content: [
+                { type: "text", text: '{"status":' },
+                { type: "text", text: '"clarification"}' },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      status: "content",
+      content: '{"status":"clarification"}',
+    });
+  });
+
+  it("distinguishes empty, refused, and malformed responses", () => {
+    expect(
+      extractOpenRouterContent({
+        choices: [{ message: { content: null } }],
+      }),
+    ).toEqual({ status: "empty" });
+    expect(
+      extractOpenRouterContent({
+        choices: [
+          { finish_reason: "length", message: { content: null } },
+        ],
+      }),
+    ).toEqual({ status: "truncated" });
+    expect(
+      extractOpenRouterContent({
+        choices: [{ message: { content: null, refusal: "Not allowed" } }],
+      }),
+    ).toEqual({ status: "refused" });
+    expect(extractOpenRouterContent({ error: "provider failure" })).toEqual({
+      status: "unexpected",
+    });
+  });
+});
 
 describe("AI-generated schema parsing", () => {
-  it("parses a valid JSON schema and applies the requested count and seed", () => {
+  it("parses a schema with the requested count and applies the generation seed", () => {
     const result = parseAiSchema(
       JSON.stringify({
+        status: "ready",
         name: "users",
+        count: 30,
         fields: [
           { name: "id", type: "uuid" },
           { name: "email", type: "email" },
           { name: "role", type: "enum", options: ["admin", "member"] },
         ],
       }),
-      30,
       123,
     );
 
-    expect(result.name).toBe("users");
-    expect(result.fields).toHaveLength(3);
-    expect(result.count).toBe(30);
-    expect(result.seed).toBe(123);
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.name).toBe("users");
+      expect(result.request.fields).toHaveLength(3);
+      expect(result.request.count).toBe(30);
+      expect(result.request.seed).toBe(123);
+    }
+  });
+
+  it("returns a clarification instead of generating when count is missing", () => {
+    const result = parseAiSchema(
+      '{"status":"clarification","question":"How many products should I generate?"}',
+      0,
+    );
+
+    expect(result).toEqual({
+      status: "clarification",
+      question: "How many products should I generate?",
+    });
+  });
+
+  it("asks for the record count when a ready response contains fields but no count", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        name: "cards",
+        fields: [
+          { name: "card_id", type: "uuid" },
+          { name: "customer_id", type: "uuid" },
+          { name: "network", type: "enum", options: ["VISA", "MASTERCARD"] },
+          { name: "expiry_month", type: "integer" },
+          { name: "expiry_year", type: "integer" },
+          { name: "contactless_enabled", type: "boolean" },
+          { name: "daily_atm_limit", type: "price" },
+          { name: "status", type: "enum", options: ["ACTIVE", "BLOCKED"] },
+          { name: "created_at", type: "date" },
+          { name: "online_payments_enabled", type: "boolean" },
+        ],
+      }),
+      0,
+    );
+
+    expect(result).toEqual({
+      status: "clarification",
+      question: "How many records should I generate? Choose between 1 and 500.",
+    });
   });
 
   it("accepts a fenced JSON response", () => {
     const result = parseAiSchema(
-      '```json\n{"name":"products","fields":[{"name":"price","type":"price"}]}\n```',
-      2,
+      '```json\n{"status":"ready","name":"products","count":2,"fields":[{"name":"price","type":"price"}]}\n```',
       0,
     );
 
-    expect(result.name).toBe("products");
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.name).toBe("products");
+    }
   });
 
   it("rejects unsupported field types and duplicate field names", () => {
     expect(() =>
       parseAiSchema(
-        '{"name":"users","fields":[{"name":"password","type":"secret"}]}',
-        1,
+        '{"status":"ready","name":"users","count":1,"fields":[{"name":"password","type":"secret"}]}',
         0,
       ),
     ).toThrow();
 
     expect(() =>
       parseAiSchema(
-        '{"name":"users","fields":[{"name":"email","type":"email"},{"name":"email","type":"uuid"}]}',
-        1,
+        '{"status":"ready","name":"users","count":1,"fields":[{"name":"email","type":"email"},{"name":"email","type":"uuid"}]}',
+        0,
+      ),
+    ).toThrow();
+  });
+
+  it("rejects counts above the generation limit", () => {
+    expect(() =>
+      parseAiSchema(
+        '{"status":"ready","name":"users","count":501,"fields":[{"name":"email","type":"email"}]}',
         0,
       ),
     ).toThrow();

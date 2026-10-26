@@ -5,6 +5,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiKeySummary } from "./DeveloperPanel";
 import WorkspaceShell from "./WorkspaceShell";
 
+export const maxDuration = 60;
+
 export default function WorkspacePage() {
   return (
     <Suspense fallback={<WorkspaceLoading />}>
