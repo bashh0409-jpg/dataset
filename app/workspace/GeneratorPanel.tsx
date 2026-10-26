@@ -690,7 +690,6 @@ export default function GeneratorPanel({
                 <button
                   aria-label="Attach a file (not implemented)"
                   className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white cursor-pointer text-white transition hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-50"
-                 
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -719,9 +718,10 @@ export default function GeneratorPanel({
                   )}
                 </button>
               </div>
-              <p className="mt-2 flex hidden justify-between text-[10px] font-medium text-[#999]">
+              <p className="mt-2 flex mx-auto max-w-120 justify-between text-[10px] font-medium text-[#999]">
                 <span>{generating ? "Generating…" : "Qwen3.7 Plus"}</span>
               </p>
+              
             </form>
           </section>
         ) : (

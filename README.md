@@ -47,7 +47,22 @@ After OAuth sign-in, new users complete onboarding by adding their name and crea
 
 ## Data generator
 
-The workspace **Generate** section supports AI-assisted generation through OpenRouter's `qwen/qwen3.7-plus` model and manual generation without an AI request. In manual mode, configure the dataset name, fields, field types, enum options, and record count; up to 500 records are generated locally. In Agent mode, describe the data and the AI asks for a record count if one is missing. Agent conversations are saved privately to the signed-in user's account and can be reopened, renamed, pinned, unpinned, archived, or unarchived from the workspace sidebar. Generated records are held in the browser and are not persisted. Apply the `20261026170000_create_ai_conversations.sql`, `20261026171000_add_ai_conversation_pinning.sql`, and `20261026172000_add_ai_conversation_archiving.sql` migrations to enable chat history and management. Add a server-only `OPENROUTER_API_KEY` to enable AI generation. OpenRouter account credits, model availability, and pricing may apply. Results can be viewed as a table, JSON, or CSV, and JSON/CSV can be copied or downloaded.
+The workspace **Generate** section supports AI-assisted generation through OpenRouter's `qwen/qwen3.7-plus` model and manual generation without an AI request. In manual mode, configure the dataset name, fields, field types, enum options, and record count; up to 500 records are generated locally. In Agent mode, describe the data and the AI asks for a record count if one is missing. Agent conversations are saved privately to the signed-in user's account and can be reopened, renamed, pinned, unpinned, archived, or unarchived from the workspace sidebar. Generated records are held in the browser and are not persisted. Apply the `20261026170000_create_ai_conversations.sql`, `20261026171000_add_ai_conversation_pinning.sql`, and `20261026172000_add_ai_conversation_archiving.sql` migrations to enable chat history and management. Add a server-only `OPENROUTER_API_KEY` to enable Qwen. OpenRouter account credits, model availability, and pricing may apply. Results can be viewed as a table, JSON, or CSV, and JSON/CSV can be copied or downloaded.
+
+### Pro plans and AI providers
+
+The **Go Pro** button in the workspace toolbar starts a Polar subscription checkout. The starter Polar product is intended to be a **$10/month recurring subscription**. Claude Sonnet 4.6 and OpenAI GPT-4.1 provider routing and optional user-key storage are implemented server-side, but their model and key controls are intentionally not exposed in the generator yet; those controls will be added to account settings before Pro AI models are made available. The intended initial allowance is at most 50 app-funded requests per billing period, enforced by a database function. Provider credentials are encrypted at rest with AES-256-GCM and are never returned to the browser after saving.
+
+To enable Pro:
+
+1. Apply `20261026180000_add_pro_subscriptions_and_ai_credentials.sql` after the existing migrations. The script is safe to re-run if its tables were already created; it refreshes the policy and function definitions without dropping subscription or credential data.
+2. Create a monthly $10 Pro product in Polar and configure its product ID as `POLAR_PRO_PRODUCT_ID`. Create an organization access token and webhook secret.
+3. Register `https://<your-app-host>/api/webhooks/polar` in Polar for subscription created, updated, active, canceled, cycled, past-due, paused, resumed, revoked, and uncanceled events.
+4. Set `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_PRO_PRODUCT_ID`, `POLAR_ENVIRONMENT` (`sandbox` while testing, `production` for live billing), and `NEXT_PUBLIC_SITE_URL`.
+5. Configure server-only `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` to fund the included requests. Users who choose their own keys do not require these server provider keys.
+6. Set `AI_CREDENTIALS_ENCRYPTION_KEY` to a securely generated base64url-encoded 32-byte key (for example, generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`). Keep it private and back it up securely; changing it makes existing saved provider keys unreadable, so users would need to save them again.
+
+Apply the same Polar environment (sandbox or production) to the product, access token, and webhook. Provider prices and usage are variable; the included request cap is intended to bound app-funded usage, not to guarantee a fixed provider cost. For current token pricing, see [Anthropic's pricing](https://platform.claude.com/docs/en/about-claude/pricing) and [OpenAI's pricing](https://developers.openai.com/api/docs/pricing).
 
 ### Workspace invitation emails
 

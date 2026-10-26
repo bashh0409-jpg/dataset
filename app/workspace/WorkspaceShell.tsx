@@ -43,6 +43,8 @@ type Workspace = {
 type WorkspaceShellProps = {
   displayName: string;
   email: string;
+  isPro: boolean;
+  billingStatusError: string;
   apiKeys: ApiKeySummary[];
   workspaces: Workspace[];
 };
@@ -147,6 +149,8 @@ const viewLabels: Record<WorkspaceView, string> = {
 export default function WorkspaceShell({
   displayName,
   email,
+  isPro,
+  billingStatusError,
   apiKeys,
   workspaces,
 }: WorkspaceShellProps) {
@@ -179,6 +183,31 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      new URLSearchParams(window.location.search).get("billing") !== "success"
+    ) {
+      return;
+    }
+
+    if (isPro) {
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+
+    let refreshCount = 0;
+    const refreshInterval = window.setInterval(() => {
+      refreshCount += 1;
+      router.refresh();
+      if (refreshCount >= 30) {
+        window.clearInterval(refreshInterval);
+      }
+    }, 2_000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [isPro, router]);
 
   const activeChats = savedConversations.filter((chat) => !chat.archived);
   const archivedChats = savedConversations.filter((chat) => chat.archived);
@@ -744,6 +773,8 @@ export default function WorkspaceShell({
         className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden"
       >
         <WorkspaceToolbar
+          billingStatusError={billingStatusError}
+          isPro={isPro}
           onManage={() => setAccessDialog("manage")}
           onInvite={() => setAccessDialog("invite")}
           workspaceName={activeWorkspace?.name ?? "Your workspace"}

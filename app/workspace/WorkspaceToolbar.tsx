@@ -1,17 +1,27 @@
 "use client";
 
-import { ChevronDown, Share2, UsersRound, UserRoundPlus } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Share2,
+  UsersRound,
+  UserRoundPlus,
+} from "lucide-react";
 
 type WorkspaceToolbarProps = {
+  billingStatusError: string;
+  isPro: boolean;
   workspaceName: string;
   onManage: () => void;
   onInvite: () => void;
 };
 
 const buttonClass =
-  "flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] font-medium tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
+  "flex w-fit items-center gap-2 rounded-full px-2 py-1.5 text-left text-[12px] font-medium tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
 
 export default function WorkspaceToolbar({
+  billingStatusError,
+  isPro,
   workspaceName,
   onManage,
   onInvite,
@@ -55,7 +65,34 @@ export default function WorkspaceToolbar({
           Share
         </button>
 
-        <button className="bg-black cursor-pointer text-xs px-2 rounded text-white h-7 tracking-tight font-semibold">Upgrade to Pro</button>
+        {billingStatusError ? (
+          <span
+            aria-label={billingStatusError}
+            className="flex h-7 items-center rounded border border-[#f1dfb4] bg-[#fffaf0] px-2 text-[10px] font-medium text-[#805c18]"
+            role="status"
+            title={billingStatusError}
+          >
+            Plan status unavailable
+          </span>
+        ) : isPro ? (
+          <a
+            aria-label="Pro subscription active. Manage your plan"
+            className="flex h-7 items-center gap-1 rounded-full border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+            href="/api/billing/portal"
+            title="Pro plan active — manage subscription"
+          >
+
+            Pro
+          </a>
+        ) : (
+          <a
+            aria-label="Subscribe to Synthetic Pro"
+            className="flex h-7 items-center rounded bg-black px-2 text-xs font-semibold tracking-tight text-white transition hover:bg-[#333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+            href="/api/billing/checkout"
+          >
+            Go Pro
+          </a>
+        )}
       </div>
     </div>
   );

@@ -58,6 +58,13 @@ async function WorkspaceContent() {
     throw new Error("Unable to load your API keys.");
   }
 
+  const { data: subscriptionIsPro, error: subscriptionError } =
+    await supabase.rpc("has_active_pro_subscription");
+  const billingStatusError = subscriptionError
+    ? "Pro status is unavailable. Apply the Pro billing migration to your Supabase database, then refresh."
+    : "";
+  const isPro = subscriptionIsPro === true;
+
   const displayName =
     typeof user.user_metadata.full_name === "string"
       ? user.user_metadata.full_name
@@ -69,6 +76,8 @@ async function WorkspaceContent() {
     <WorkspaceShell
       displayName={displayName}
       email={user.email ?? ""}
+      billingStatusError={billingStatusError}
+      isPro={isPro}
       apiKeys={apiKeys.map((key): ApiKeySummary => ({
         id: key.id,
         name: key.name,
