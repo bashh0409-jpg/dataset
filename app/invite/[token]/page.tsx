@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import InviteSignIn from "@/app/components/InviteSignIn";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -22,6 +23,8 @@ async function InviteContent({
 }: {
   params: Promise<{ token: string }>;
 }) {
+  await connection();
+
   const { token } = await params;
   if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) {
     return <InviteError />;
@@ -48,7 +51,9 @@ async function InviteContent({
 function InviteLoading() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#f7f7f5] text-[#171717]">
-      Loading invitation...
+      <p className="geist text-center text-sm font-medium leading-4 tracking-tight text-[#999]">
+        Loading invitation...
+      </p>
     </main>
   );
 }
@@ -56,17 +61,24 @@ function InviteLoading() {
 function InviteError() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#f7f7f5] px-5 text-[#171717]">
-      <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold">Invite link unavailable</h1>
-        <p className="mt-2 text-gray-600">
+      <section className="w-full max-w-md rounded-2xl p-8 ">
+        <h2
+          id="signin-title"
+          className="geist mb-2 text-left  text-xl font-semibold tracking-tighter text-black"
+        >
+          Invite link unavailable
+        </h2>
+
+        <p className="geist text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
           This invite may have expired, already been used, or was created for a
           different email address.
         </p>
+
         <Link
-          className="mt-6 inline-block font-medium text-[#202ded] underline"
+          className="geist underline mt-8 text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]"
           href="/"
         >
-          Return to Synthetic
+          Open Synthetic
         </Link>
       </section>
     </main>

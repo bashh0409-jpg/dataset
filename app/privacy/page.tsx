@@ -14,6 +14,7 @@ const sections = [
 export default function LegalPage() {
   return (
     <main className="min-h-screen geist bg-white  px-5 py-6 text-black sm:px-8 sm:py-10">
+      
       <article className="mx-auto w-full max-w-xl pb-20 pt-16 sm:pt-24">
         <div className="mb-8 ">
           <span className="text-right text-xs font-medium tracking-tight text-[#999] sm:text-sm">

@@ -1,13 +1,45 @@
-import React from 'react'
-import Hero from './components/Hero'
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import Hero from "./components/Hero";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const page = () => {
+export default function Page() {
   return (
-    <div><Hero />
-    <section data-nav-theme="white" className='w-full min-h-screen h-full bg-white'></section>
-    <section data-nav-theme="black" className='w-full min-h-screen h-full bg-black'></section>
-    </div>
-  )
+    <Suspense fallback={<HomeLoading />}>
+      <HomeContent />
+    </Suspense>
+  );
 }
 
-export default page
+async function HomeContent() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/workspace");
+  }
+
+  return (
+    <div>
+      <Hero />
+      <section
+        data-nav-theme="white"
+        className="h-full min-h-screen w-full bg-white"
+      ></section>
+      <section
+        data-nav-theme="black"
+        className="h-full min-h-screen w-full bg-black"
+      ></section>
+    </div>
+  );
+}
+
+function HomeLoading() {
+  return (
+    <main className="min-h-svh bg-white" aria-label="Loading home page">
+      <div className="h-svh animate-pulse bg-[#f8f8f8]" />
+    </main>
+  );
+}

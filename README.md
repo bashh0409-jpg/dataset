@@ -22,7 +22,9 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## OAuth sign-in
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers. Email sign-in uses Supabase's default magic-link templates and does not require template customization. Add your app URL with `/auth/callback` to the Supabase redirect URL allow list (for local development: `http://localhost:3000/auth/callback`).
+Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers. Email sign-in uses Supabase's default magic-link templates and does not require template customization.
+
+In Supabase **Authentication → URL Configuration**, set the Site URL to your deployed app URL and add each app callback to the Redirect URLs allow list. For local development, add `http://localhost:3000/**` (and `http://127.0.0.1:3000/**` if you use that address). If a callback URL is not allowlisted, Supabase can redirect to the Site URL instead, which may send a local sign-in back to production. The Google/GitHub provider callback URL remains the Supabase Auth callback URL shown in the provider settings; it is separate from your app's `/auth/callback`.
 
 ### Local email testing with Supabase
 
@@ -36,12 +38,16 @@ This starts the local Supabase services, including the local auth API and the em
 
 - Use `http://localhost:54321` as the local Supabase URL.
 - Set `NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321` in your `.env.local` file.
-- Add `http://localhost:3000/auth/callback` to the allowed redirect URLs in the local Supabase project.
+- The local Supabase Auth configuration allows callbacks on `http://localhost:3000` and `http://127.0.0.1:3000`.
 - View captured emails at `http://localhost:54324` (Inbucket / mail catcher UI).
 
 The local Supabase project also exposes the anon/service-role keys in the terminal output from `supabase start`; copy those into your local environment file so the app and auth flows work on localhost.
 
-After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can generate a single-use invite link for a teammate; links expire after seven days and can only be accepted by the invited email address.
+After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can send a single-use workspace invitation by email; the invitation expires after seven days and can only be accepted by the invited email address.
+
+### Workspace invitation emails
+
+Workspace invitations are sent with Resend. Set `RESEND_API_KEY` to a server-only Resend API key and `RESEND_FROM_EMAIL` to a sender address verified by Resend. Set `NEXT_PUBLIC_SITE_URL` to the app's public origin (`http://localhost:3000` for local development) so the emailed invitation points to the correct app. In production, use your deployed HTTPS URL and a verified sending domain. The invite URL is only sent to the recipient; the raw token is not returned to the browser.
 
 ## Supabase CLI in VS Code
 

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(
@@ -38,6 +38,26 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedNext = request.nextUrl.searchParams.get("next");
+  const inviteToken = requestedNext?.match(
+    /^\/invite\/([A-Za-z0-9_-]{40,60})$/,
+  )?.[1];
+  const user = data.user;
+  const createdAt = Date.parse(user.created_at);
+  const lastSignInAt = user.last_sign_in_at
+    ? Date.parse(user.last_sign_in_at)
+    : Number.NaN;
+  const isNewAccount =
+    Number.isFinite(createdAt) &&
+    Number.isFinite(lastSignInAt) &&
+    lastSignInAt >= createdAt &&
+    lastSignInAt - createdAt < 5 * 60 * 1000;
+
+  if (inviteToken && isNewAccount) {
+    const onboardingUrl = new URL("/onboarding", request.url);
+    onboardingUrl.searchParams.set("invite", inviteToken);
+    return NextResponse.redirect(onboardingUrl);
+  }
+
   const nextUrl = requestedNext
     ? new URL(requestedNext, request.url)
     : new URL("/onboarding", request.url);

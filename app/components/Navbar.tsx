@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignInModal from "./SignInModal";
 
@@ -12,11 +13,13 @@ const themeClasses: Record<NavTheme, string> = {
 };
 
 const Navbar = () => {
+  const pathname = usePathname();
   const [theme, setTheme] = useState<NavTheme>("blue");
   const [signInOpen, setSignInOpen] = useState(false);
   const [signInError, setSignInError] = useState("");
   const navRef = useRef<HTMLElement>(null);
   const closeSignIn = useCallback(() => setSignInOpen(false), []);
+  const hideNav = pathname === "/workspace" || pathname.startsWith("/workspace/");
 
   useEffect(() => {
     let frame = 0;
@@ -57,6 +60,8 @@ const Navbar = () => {
       window.removeEventListener("resize", updateTheme);
     };
   }, []);
+
+  if (hideNav) return null;
 
   return (
     <>

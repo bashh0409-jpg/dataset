@@ -33,7 +33,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-helvetica-now), var(--font-geist-sans), sans-serif;
+  font-family:  var(--font-geist-sans),var(--font-helvetica-now), sans-serif;
 }
 
 .geist {
@@ -44,6 +44,130 @@ body {
   color:#202ded; 
 }
 
+.workspace-shell {
+  font-family: var(--font-geist-sans), var(--font-helvetica-now), sans-serif;
+}
+
+.workspace-toolbar-button {
+  display: flex;
+  width: 16px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  color: #777973;
+  transition: color 150ms ease;
+}
+
+.workspace-toolbar-button:hover {
+  color: #282a26;
+}
+
+.workspace-toolbar-button:focus-visible,
+.workspace-compose-button:focus-visible,
+.workspace-section-link:focus-visible,
+.workspace-bottom-link:focus-visible {
+  outline: 2px solid #a3a59e;
+  outline-offset: 2px;
+}
+
+.workspace-toolbar-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+}
+
+.workspace-compose-button {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #242622;
+  color: #f9faf7;
+  transition: background-color 150ms ease;
+}
+
+.workspace-compose-button:hover {
+  background: #4a4c46;
+}
+
+.workspace-compose-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+}
+
+.workspace-section-link {
+  display: flex;
+  width: 100%;
+  height: 27px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+  padding: 0 2px;
+  color: #757771;
+  font-size: 12px;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.workspace-section-link:hover,
+.workspace-section-link-active {
+  background: #f1f2ee;
+  color: #383a35;
+}
+
+.workspace-bottom-link {
+  display: flex;
+  height: 54px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #777973;
+  transition: color 150ms ease;
+}
+
+.workspace-bottom-link:hover,
+.workspace-bottom-link-active {
+  color: #42443f;
+}
+
+.workspace-bottom-link span {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 10px;
+  line-height: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-watermark {
+  color: #f8f9f5;
+  font-family: var(--font-pp-locomotive), var(--font-helvetica-now), sans-serif;
+  font-size: clamp(90px, 13vw, 184px);
+  font-weight: 300;
+  letter-spacing: -0.085em;
+  line-height: 0.9;
+  padding-right: 0.08em;
+  text-shadow:
+    1px 1px 0 #f1f2ed,
+    2px 2px 0 #f5f6f1,
+    -1px -1px 0 #ffffff;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .workspace-bottom-link span {
+    font-size: 9px;
+  }
+
+  .workspace-watermark {
+    font-size: clamp(62px, 15vw, 96px);
+  }
+}
 
 .intro {
   font-family: var(--font-pp-locomotive), sans-serif;

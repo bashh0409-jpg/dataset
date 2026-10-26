@@ -3,47 +3,84 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import {
+  completeInvitedUserOnboarding,
   createOnboardingWorkspace,
   createWorkspaceInvite,
 } from "@/app/actions/onboarding";
 
 type OnboardingFlowProps = {
   initialName: string;
+  invitationToken?: string;
+  invitedWorkspaceName?: string;
 };
 
-type Step = "name" | "workspace" | "invite" | "complete";
+type Step = "name" | "join" | "workspace" | "invite" | "complete";
 
 const inputClass =
   "geist mt-2 max-h-9 w-full rounded border border-black/10 bg-black/[0.03] px-3 py-2 text-sm font-semibold leading-4 tracking-tight text-[#333] outline-none transition  focus:bg-black/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
 const actionButtonClass =
   "geist mt-5 w-full cursor-pointer rounded bg-black px-3 py-2 text-sm font-semibold leading-4 tracking-tight text-white transition duration-300 hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
-export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
+export default function OnboardingFlow({
+  initialName,
+  invitationToken,
+  invitedWorkspaceName,
+}: OnboardingFlowProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("name");
   const [displayName, setDisplayName] = useState(initialName);
   const [workspaceName, setWorkspaceName] = useState("");
   const [email, setEmail] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
-  const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteSentTo, setInviteSentTo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const stepNumber = {
     name: 1,
+    join: 2,
     workspace: 2,
     invite: 3,
     complete: 3,
   }[step];
 
-  const submitName = (event: FormEvent<HTMLFormElement>) => {
+  const submitName = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!displayName.trim()) {
       setError("Enter your name to continue.");
       return;
     }
     setError("");
+
+    if (invitationToken) {
+      setStep("join");
+      return;
+    }
+
     setStep("workspace");
+  };
+
+  const joinInvitedWorkspace = async () => {
+    if (!invitationToken) return;
+
+    setError("");
+    setBusy(true);
+
+    try {
+      const result = await completeInvitedUserOnboarding({
+        displayName,
+        token: invitationToken,
+      });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      router.replace("/workspace");
+      router.refresh();
+    } catch {
+      setError("A network error occurred. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submitWorkspace = async (event: FormEvent<HTMLFormElement>) => {
@@ -80,21 +117,12 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         setError(result.error);
         return;
       }
-      setInviteUrl(`${window.location.origin}/invite/${result.data.token}`);
+      setInviteSentTo(result.data.email);
       setStep("complete");
     } catch {
       setError("A network error occurred. Please try again.");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const copyInvite = async () => {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-    } catch {
-      setError("Couldn't copy the link. Select and copy it manually.");
     }
   };
 
@@ -123,13 +151,34 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
           ))}
         </div>
 
-        {step === "name" && (
+        {invitationToken && !invitedWorkspaceName && (
+          <div>
+            <h1 className="geist mb-2 text-left text-xl font-semibold tracking-tighter">
+              Invitation unavailable
+            </h1>
+            <p className="geist text-sm font-medium leading-4 tracking-tight text-[#999]">
+              This invitation may have expired, already been used, or was
+              created for a different email address.
+            </p>
+            <button
+              className={actionButtonClass}
+              onClick={() => router.replace("/")}
+              type="button"
+            >
+              Return to Synthetic
+            </button>
+          </div>
+        )}
+
+        {(!invitationToken || invitedWorkspaceName) && step === "name" && (
           <form onSubmit={submitName}>
             <h1 className="geist mt-1 hidden text-xl font-semibold tracking-tighter">
               What should we call you?
             </h1>
             <p className="geist text-sm mb-2 font-medium leading-4 tracking-tight text-[#999]">
-              What should we call you? This name will appear on your profile.
+              {invitationToken
+                ? `Enter your name to continue to ${invitedWorkspaceName}.`
+                : "What should we call you? This name will appear on your profile."}
             </p>
 
             <input
@@ -142,8 +191,43 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
               required
               value={displayName}
             />
-            <ContinueButton />
+            <ContinueButton busy={busy} />
           </form>
+        )}
+
+        {step === "join" && invitedWorkspaceName && (
+          <div>
+            <h1 className="geist mb-2 text-left text-xl font-semibold tracking-tighter text-black">
+              Join workspace
+            </h1>
+            <p className="geist text-sm font-medium leading-4 tracking-tight text-[#999]">
+              You&apos;ve been invited to join
+            </p>
+            <div className="mt-3 rounded border border-black/10 bg-black/[0.03] px-3 py-3">
+              <p className="text-sm font-semibold tracking-tight text-[#333]">
+                {invitedWorkspaceName}
+              </p>
+            </div>
+            <button
+              className={actionButtonClass}
+              disabled={busy}
+              onClick={() => void joinInvitedWorkspace()}
+              type="button"
+            >
+              {busy ? "Joining..." : "Join workspace"}
+            </button>
+            <button
+              className="geist mt-3 w-full cursor-pointer rounded px-3 py-2 text-xs font-semibold leading-4 tracking-tight text-[#777] transition hover:bg-black/[0.05] hover:text-black"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setStep("name");
+              }}
+              type="button"
+            >
+              Back
+            </button>
+          </div>
         )}
 
         {step === "workspace" && (
@@ -170,8 +254,8 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
         {step === "invite" && (
           <form onSubmit={submitInvite}>
             <p className="geist mt-1 mb-2 text-sm font-medium leading-4 tracking-tight text-[#999]">
-              Invite someone to join. Create a private invite link for a
-              teammate. You can share it with them directly.
+              Invite someone to join. We&apos;ll email them a private,
+              single-use link that expires after seven days.
             </p>
            
             <input
@@ -184,7 +268,7 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
               type="email"
               value={email}
             />
-            <ContinueButton busy={busy} label="Create invite link" />
+            <ContinueButton busy={busy} label="Send invitation" />
             <button
               className="geist mt-3 w-full cursor-pointer rounded px-3 py-2 text-xs font-semibold leading-4 tracking-tight text-[#777] transition hover:bg-black/[0.05] hover:text-black"
               onClick={() => setStep("complete")}
@@ -199,28 +283,10 @@ export default function OnboardingFlow({ initialName }: OnboardingFlowProps) {
           <div>
             
             <p className="geist mt-2 text-sm font-medium leading-4 tracking-tight text-[#999]">
-              {inviteUrl
-                ? "Share this one-time link with your teammate. It expires in 7 days and can only be used by the invited email address."
+              {inviteSentTo
+                ? `An invitation email has been sent to ${inviteSentTo}. They can use its one-time link within 7 days.`
                 : "You can invite teammates from your workspace later."}
             </p>
-            {inviteUrl && (
-              <div className="mt-2">
-               
-                <input
-                  className={`${inputClass} text-sm`}
-                  id="invite-link"
-                  readOnly
-                  value={inviteUrl}
-                />
-                <button
-                  className="geist mt-3 w-full cursor-pointer rounded border border-black/10 bg-black/[0.03] px-3 py-2 text-sm font-medium leading-4 tracking-tight text-[#333] transition hover:bg-black/[0.06]"
-                  onClick={() => void copyInvite()}
-                  type="button"
-                >
-                  {copied ? "Copied" : "Copy invite link"}
-                </button>
-              </div>
-            )}
             <button
               className={actionButtonClass}
               onClick={() => router.replace("/workspace")}

@@ -1,6 +1,9 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { ApiKeySummary } from "./DeveloperPanel";
+import WorkspaceShell from "./WorkspaceShell";
 
 export default function WorkspacePage() {
   return (
@@ -11,6 +14,8 @@ export default function WorkspacePage() {
 }
 
 async function WorkspaceContent() {
+  await connection();
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -41,34 +46,46 @@ async function WorkspaceContent() {
     throw new Error("Unable to load your workspaces.");
   }
 
+  const { data: apiKeys, error: apiKeysError } = await supabase
+    .from("api_keys")
+    .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (apiKeysError) {
+    throw new Error("Unable to load your API keys.");
+  }
+
+  const displayName =
+    typeof user.user_metadata.full_name === "string"
+      ? user.user_metadata.full_name
+      : typeof user.user_metadata.name === "string"
+        ? user.user_metadata.name
+        : "";
+
   return (
-    <main className="min-h-svh bg-white px-6 pb-16 pt-28 text-[#171717] md:px-12">
-      <div className="mx-auto max-w-6xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#202ded]">
-          Synthetic®
-        </p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-6xl">
-          Your workspace
-        </h1>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {workspaces.map((workspace) => (
-            <article
-              key={workspace.id}
-              className="rounded-xl border border-black/10 p-6"
-            >
-              <h2 className="text-xl font-semibold">{workspace.name}</h2>
-            </article>
-          ))}
-        </div>
-      </div>
-    </main>
+    <WorkspaceShell
+      displayName={displayName}
+      email={user.email ?? ""}
+      apiKeys={apiKeys.map((key): ApiKeySummary => ({
+        id: key.id,
+        name: key.name,
+        prefix: key.key_prefix,
+        createdAt: key.created_at,
+        lastUsedAt: key.last_used_at,
+        revokedAt: key.revoked_at,
+      }))}
+      workspaces={workspaces ?? []}
+    />
   );
 }
 
 function WorkspaceLoading() {
   return (
-    <main className="flex min-h-svh items-center justify-center bg-white text-[#171717]">
-      Loading workspace...
+    <main className="flex min-h-svh items-center justify-center bg-[#fbfcf9] text-sm text-[#777]">
+      <p className="geist text-center text-sm font-medium leading-4 tracking-tight text-[#999]">
+        Loading workspace...
+      </p>
     </main>
   );
 }

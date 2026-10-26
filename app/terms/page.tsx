@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Legal | Synthetic",
-  description: "Privacy, cookies, and terms for the Synthetic website.",
+  title: "Legal | Sythentic",
+  description: "Privacy, cookies, and terms for the Sythentic website.",
 };
 
 const sections = [
@@ -24,8 +25,8 @@ export default function LegalPage() {
           </h1>
           <p className="mt-3 text-sm leading-4 tracking-tight ">
             <span className="text-[#999]  text-sm mb-2 font-medium tracking-tight ">
-              These terms and notices apply to the Synthetic website and related
-              product experience. Synthetic may evolve over time and is provided
+              These terms and notices apply to the Sythentic website and related
+              product experience. Sythentic may evolve over time and is provided
               as a developer tool for synthetic data generation.
             </span>
           </p>
@@ -55,28 +56,20 @@ export default function LegalPage() {
             </h2>
             <div className="space-y-3 text-justify text-sm font-medium leading-4 tracking-tight">
               <p>
-                By using this website, you agree to use it only for lawful,
-                legitimate purposes. You may not attempt to interfere with the
-                security, integrity, or availability of the site, its services,
-                or any connected systems.
+                By using this website, you agree to use it only for lawful
+                purposes. Do not attempt unauthorized access to the site or
+                connected systems, or use the site in a way that could disrupt
+                or damage it.
               </p>
               <p>
-                Synthetic provides a platform for synthetic data generation and
-                related developer workflows. The site and its content are
-                provided for informational and product-use purposes and may be
-                updated, changed, or unavailable at any time without notice.
+                The website and its content are provided for general information
+                and may change or become unavailable. Nothing on this website
+                creates an agreement for cloud storage or other services.
               </p>
               <p>
-                We may improve, modify, or discontinue features as the product
-                evolves. Nothing in these terms creates a promise of future
-                availability, support, or access beyond what is explicitly
-                provided in a separate agreement.
-              </p>
-              <p>
-                All content on this website, including text, branding, product
-                names, and visuals, belongs to Synthetic or its relevant rights
-                holders unless otherwise stated. Please do not reproduce or
-                redistribute materials without permission.
+                Content on this website belongs to Splash or its respective
+                rights holders. Please obtain permission before reproducing or
+                distributing it.
               </p>
             </div>
           </section>
@@ -87,24 +80,15 @@ export default function LegalPage() {
             </h2>
             <div className="space-y-3 text-justify text-sm font-medium leading-4 tracking-tight">
               <p>
-                We collect only the personal information reasonably needed to
-                operate and improve the website and product. This may include
-                information you provide when contacting us, such as your email
-                address and message content, as well as technical information
-                about how the site is used.
+                If you contact us by email, we receive the address and message
+                you choose to send. We use it to respond to your enquiry. Please
+                do not email passwords or sensitive files.
               </p>
               <p>
-                We use this information to respond to support and enquiry
-                requests, maintain the service, diagnose issues, and understand
-                product usage. We do not sell personal information and we do not
-                use your data to build profiles for advertising or unrelated
-                third-party marketing.
-              </p>
-              <p>
-                With your consent, this site may load Vercel Analytics and Speed
-                Insights to understand site performance and usage patterns.
-                These services may process technical information about your
-                visit. For details, see the{" "}
+                With your consent, this site loads Vercel Analytics and Speed
+                Insights to understand site usage and performance. These
+                services may process technical information about your visit. For
+                details, see the{" "}
                 <a
                   href="https://vercel.com/legal/privacy-policy"
                   target="_blank"
@@ -116,10 +100,9 @@ export default function LegalPage() {
                 .
               </p>
               <p>
-                If you have provided personal information to us, you may contact
-                us to ask about what we hold, request correction, or request
-                deletion where applicable law requires it. For privacy
-                questions, email{" "}
+                You can contact us to ask about personal information you have
+                sent us, or to request its correction or deletion, subject to
+                applicable law. For privacy questions, email{" "}
                 <a
                   href="mailto:bashh0409@gmail.com"
                   className="text-blue-600 underline"
@@ -137,22 +120,15 @@ export default function LegalPage() {
             </h2>
             <div className="space-y-3 text-justify text-sm font-medium leading-4 tracking-tight">
               <p>
-                We use cookies and local storage only where necessary to
-                remember your consent choices and support core website
-                functionality. Your consent selection is saved in the browser so
-                the site can respect it on later visits.
+                Your consent choice is saved in your browser&apos;s local
+                storage so we can remember it on later visits. Accept enables
+                Vercel Analytics and Speed Insights; Decline leaves them
+                disabled.
               </p>
               <p>
-                If you accept analytics, Vercel Analytics and Speed Insights may
-                collect limited technical information about page views and site
-                performance. If you decline, those analytics tools remain
-                disabled. We do not use advertising cookies for behavioural
-                targeting.
-              </p>
-              <p>
-                You can clear your saved choice by removing this site&apos;s
-                local storage in your browser settings. Doing so may cause the
-                consent prompt to appear again when you next visit.
+                This site does not use advertising cookies. You can clear your
+                saved choice by removing this site&apos;s local storage in your
+                browser settings; the consent prompt will then appear again.
               </p>
             </div>
           </section>
