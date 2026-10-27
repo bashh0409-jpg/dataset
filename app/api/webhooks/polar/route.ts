@@ -103,6 +103,11 @@ export async function POST(request: NextRequest) {
             },
           );
           if (error) {
+            console.error("Unable to apply paid workspace credit order.", {
+              eventId,
+              errorCode: error.code,
+              errorMessage: error.message,
+            });
             throw new Error("Unable to apply the workspace credit purchase.");
           }
         }
@@ -123,7 +128,13 @@ export async function POST(request: NextRequest) {
       default:
         break;
     }
-  } catch {
+  } catch (error) {
+    console.error("Unable to process Polar webhook.", {
+      eventId,
+      eventType: event.type,
+      errorMessage:
+        error instanceof Error ? error.message : "Non-Error exception",
+    });
     return Response.json(
       { error: "Unable to process the Polar webhook. Please retry." },
       { status: 500 },
