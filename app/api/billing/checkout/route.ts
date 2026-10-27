@@ -1,6 +1,6 @@
 import { createPolar } from "@polar-sh/sdk/2026-10";
 import { z } from "zod";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getPolarEnvironment, getPolarReturnUrl } from "@/lib/billing/polar";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -26,7 +26,29 @@ const checkoutClaimSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("subscribed") }),
 ]);
 
-export async function GET() {
+export async function POST(request: NextRequest) {
+  let siteUrl: string;
+  try {
+    siteUrl = getPolarReturnUrl();
+    const requestOrigin = request.headers.get("origin");
+    const fetchSite = request.headers.get("sec-fetch-site");
+    if (
+      !requestOrigin ||
+      new URL(requestOrigin).origin !== siteUrl ||
+      fetchSite === "cross-site"
+    ) {
+      return Response.json(
+        { error: "Invalid checkout request origin." },
+        { status: 403 },
+      );
+    }
+  } catch {
+    return Response.json(
+      { error: "Unable to verify checkout request origin." },
+      { status: 403 },
+    );
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -45,10 +67,8 @@ export async function GET() {
     );
   }
 
-  let siteUrl: string;
   let polar: ReturnType<typeof createPolar>;
   try {
-    siteUrl = getPolarReturnUrl();
     polar = createPolar({
       accessToken,
       environment: getPolarEnvironment(),
@@ -83,10 +103,10 @@ export async function GET() {
   }
 
   if (claim.data.status === "subscribed") {
-    return NextResponse.redirect(new URL("/workspace", siteUrl));
+    return NextResponse.redirect(new URL("/workspace", siteUrl), { status: 303 });
   }
   if (claim.data.status === "existing") {
-    return NextResponse.redirect(claim.data.checkout_url);
+    return NextResponse.redirect(claim.data.checkout_url, { status: 303 });
   }
 
   const attemptId = claim.data.attempt_id;
@@ -139,7 +159,7 @@ export async function GET() {
           { status: 503 },
         );
       }
-      return NextResponse.redirect(existingCheckout.url);
+      return NextResponse.redirect(existingCheckout.url, { status: 303 });
     }
 
     if (claim.data.status === "in_progress") {
@@ -198,7 +218,7 @@ export async function GET() {
       );
     }
 
-    return NextResponse.redirect(checkout.url);
+    return NextResponse.redirect(checkout.url, { status: 303 });
   } catch {
     return Response.json(
       { error: "Unable to start Polar checkout. Please retry shortly." },

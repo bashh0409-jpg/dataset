@@ -126,13 +126,15 @@ export default function WorkspaceToolbar({
             Pro
           </a>
         ) : (
-          <a
-            aria-label="Subscribe to Synthetic Pro"
-            className="flex h-7 items-center rounded-full bg-black px-2 text-xs font-semibold tracking-tight text-white transition hover:bg-[#333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
-            href="/api/billing/checkout"
-          >
-            Go Pro
-          </a>
+          <form action="/api/billing/checkout" method="post">
+            <button
+              aria-label="Subscribe to Synthetic Pro"
+              className="flex h-7 items-center rounded-full bg-black px-2 text-xs font-semibold tracking-tight text-white transition hover:bg-[#333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+              type="submit"
+            >
+              Go Pro
+            </button>
+          </form>
         )}
       </div>
     </div>

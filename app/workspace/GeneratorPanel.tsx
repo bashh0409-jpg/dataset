@@ -128,6 +128,9 @@ export default function GeneratorPanel({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const conversationScrollRef = useRef<HTMLDivElement>(null);
   const artifactFlyoutRef = useRef<HTMLDivElement>(null);
+  const dataScrollRef = useRef<HTMLDivElement>(null);
+  const dataScrollAxisRef = useRef<"horizontal" | "vertical" | null>(null);
+  const dataScrollIdleTimerRef = useRef<number | null>(null);
 
   const generatedCsv = dataset
     ? recordsToCsv(dataset.fields, dataset.records)
@@ -171,6 +174,58 @@ export default function GeneratorPanel({
 
     return () => resizeObserver.disconnect();
   }, [conversation, updateScrollToBottomVisibility]);
+
+  useEffect(() => {
+    const container = dataScrollRef.current;
+    if (!container || view !== "table") return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaX === 0 && event.deltaY === 0) return;
+
+      if (dataScrollAxisRef.current === null) {
+        dataScrollAxisRef.current =
+          Math.abs(event.deltaX) > Math.abs(event.deltaY)
+            ? "horizontal"
+            : "vertical";
+      }
+
+      if (dataScrollIdleTimerRef.current !== null) {
+        window.clearTimeout(dataScrollIdleTimerRef.current);
+      }
+      dataScrollIdleTimerRef.current = window.setTimeout(() => {
+        dataScrollAxisRef.current = null;
+        dataScrollIdleTimerRef.current = null;
+      }, 180);
+
+      event.preventDefault();
+      const delta =
+        dataScrollAxisRef.current === "horizontal"
+          ? event.deltaX
+          : event.deltaY;
+      const scale =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? container.clientHeight
+            : 1;
+
+      if (dataScrollAxisRef.current === "horizontal") {
+        container.scrollLeft += delta * scale;
+      } else {
+        container.scrollTop += delta * scale;
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      if (dataScrollIdleTimerRef.current !== null) {
+        window.clearTimeout(dataScrollIdleTimerRef.current);
+        dataScrollIdleTimerRef.current = null;
+      }
+      dataScrollAxisRef.current = null;
+    };
+  }, [view]);
 
   useEffect(() => {
     if (!artifactFlyoutOpen) return;
@@ -1101,7 +1156,10 @@ export default function GeneratorPanel({
           aria-label="Generated data"
           className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white"
         >
-          <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+          <div
+            className="min-h-0 flex-1 overflow-auto overscroll-contain"
+            ref={dataScrollRef}
+          >
             {!dataset ? (
               <div className="flex h-full min-h-[300px] items-center justify-center px-6 text-center">
                 <p className="max-w-[260px] text-[xs leading-tight font-medium text-[#777a72]">

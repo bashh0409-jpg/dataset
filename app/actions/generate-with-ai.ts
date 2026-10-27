@@ -402,6 +402,25 @@ export async function generateWithAi(
           "AI generation is not configured. Add OPENROUTER_API_KEY on the server.",
       };
     }
+
+    const { data: freeReservation, error: freeReservationError } =
+      await supabase.rpc("reserve_free_ai_request");
+    if (freeReservationError) {
+      return {
+        error: "Unable to verify Free model usage. Please try again.",
+      };
+    }
+    if (freeReservation === "rate_limited") {
+      return {
+        error:
+          "You've reached the Free model limit of 50 requests per 24 hours. Please try again later.",
+      };
+    }
+    if (freeReservation !== "allowed") {
+      return {
+        error: "Unable to reserve Free model usage. Please try again.",
+      };
+    }
   }
 
   if (!apiKey) {
