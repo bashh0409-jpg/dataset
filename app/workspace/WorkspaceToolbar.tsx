@@ -458,7 +458,7 @@ export default function WorkspaceToolbar({
           type="button"
         >
           <UsersRound aria-hidden="true" className="size-[18px]" />
-          Manage
+          Workspace
         </button>
         <button
           aria-label="Invite a teammate"

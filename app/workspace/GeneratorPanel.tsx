@@ -90,8 +90,9 @@ const defaultManualFields: ManualField[] = [
 ];
 
 const examples = [
-  "Generate 50 users with names, emails, and job titles",
-  "Create products with names, prices, and categories",
+  "Generate 3 customers with a UUID, full name, email, and phone number",
+  "Create 3 products with a name, price, and category",
+  "Generate 3 users and 3 orders linked by user ID",
 ];
 
 type GeneratorPanelProps = {
@@ -124,8 +125,7 @@ export default function GeneratorPanel({
   const [dataset, setDataset] = useState<GeneratedDataset | null>(null);
   const [generatedTables, setGeneratedTables] = useState<GeneratedDataset[]>([]);
   const [artifacts, setArtifacts] = useState<AiGeneratedArtifact[]>([]);
-  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
-  const [artifactFlyoutOpen, setArtifactFlyoutOpen] = useState(false);
+  const [exampleFlyoutOpen, setExampleFlyoutOpen] = useState(false);
   const [view, setView] = useState<DataView>("table");
   const [showDataPanel, setShowDataPanel] = useState(true);
   const [error, setError] = useState("");
@@ -139,7 +139,8 @@ export default function GeneratorPanel({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const conversationScrollRef = useRef<HTMLDivElement>(null);
   const pendingConversationScrollRef = useRef<ScrollBehavior | null>(null);
-  const artifactFlyoutRef = useRef<HTMLDivElement>(null);
+  const exampleFlyoutRef = useRef<HTMLDivElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const dataScrollRef = useRef<HTMLDivElement>(null);
   const dataScrollAxisRef = useRef<"horizontal" | "vertical" | null>(null);
   const dataScrollIdleTimerRef = useRef<number | null>(null);
@@ -249,18 +250,18 @@ export default function GeneratorPanel({
   }, [view]);
 
   useEffect(() => {
-    if (!artifactFlyoutOpen) return;
+    if (!exampleFlyoutOpen) return;
 
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
-        !artifactFlyoutRef.current?.contains(event.target)
+        !exampleFlyoutRef.current?.contains(event.target)
       ) {
-        setArtifactFlyoutOpen(false);
+        setExampleFlyoutOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setArtifactFlyoutOpen(false);
+      if (event.key === "Escape") setExampleFlyoutOpen(false);
     };
 
     document.addEventListener("pointerdown", closeOnOutsideClick);
@@ -269,7 +270,7 @@ export default function GeneratorPanel({
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [artifactFlyoutOpen]);
+  }, [exampleFlyoutOpen]);
 
   useEffect(() => {
     if (!requestedConversationId) return;
@@ -286,11 +287,10 @@ export default function GeneratorPanel({
         pendingConversationScrollRef.current = "auto";
         setConversation(result.data.messages);
         setArtifacts(result.data.artifacts);
-        setArtifactFlyoutOpen(false);
+        setExampleFlyoutOpen(false);
         setPrompt("");
         setDataset(null);
         setGeneratedTables([]);
-        setActiveArtifactId(null);
         setView("table");
         setError("");
         setSaveError("");
@@ -371,7 +371,6 @@ export default function GeneratorPanel({
     setShowDataPanel(true);
     setGeneratedTables([]);
     setArtifacts([]);
-    setActiveArtifactId(null);
     setConversation([]);
     setConversationId(null);
     setView("table");
@@ -494,7 +493,6 @@ export default function GeneratorPanel({
           setArtifacts((current) => [...current, ...savedArtifacts]);
           const lastArtifact = savedArtifacts.at(-1);
           if (lastArtifact) {
-            setActiveArtifactId(lastArtifact.id);
             const linkedMessages = nextMessages.map((message, index) =>
               index === nextMessages.length - 1
                 ? {
@@ -572,8 +570,11 @@ export default function GeneratorPanel({
   };
 
   const selectExample = (example: string) => {
+    setMode("agent");
     setPrompt(example);
     setError("");
+    setExampleFlyoutOpen(false);
+    window.requestAnimationFrame(() => promptInputRef.current?.focus());
   };
 
   const attachPromptFile = async (
@@ -937,7 +938,6 @@ export default function GeneratorPanel({
                                   count: linkedArtifact.count,
                                   seed: linkedArtifact.seed,
                                 });
-                                setActiveArtifactId(linkedArtifact.id);
                               }
                               setShowDataPanel(true);
                               setView("table");
@@ -979,7 +979,7 @@ export default function GeneratorPanel({
                     TypeScript, SQL, or Prisma schema.
                   </p>
 
-                  <div className="mt-5 hidde flex-col gap-1">
+                  <div className="mt-5 hidden gap-1">
                     {examples.map((example) => (
                       <button
                         className="w-full px-3 py-2 text-left text-[12px] text-[#62655e] transition-colors hover:bg-black/[0.03] hover:text-[#252721]"
@@ -1023,99 +1023,56 @@ export default function GeneratorPanel({
                   </button>
                 </div>
                 <div
-                  className={`relative flex h-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white px-1 text-[12px] text-[#696c64] motion-safe:transition-[width,gap] motion-safe:duration-200 motion-safe:ease-in-out ${
+                  className={`relative flex h-8 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[12px] text-[#696c64] motion-safe:transition-[width,gap] motion-safe:duration-200 motion-safe:ease-in-out ${
+                    exampleFlyoutOpen ? "overflow-visible" : "overflow-hidden"
+                  } ${
                     showScrollToBottom ? "w-[4.25rem] gap-1" : "w-8 gap-0"
                   }`}
-                  ref={artifactFlyoutRef}
+                  ref={exampleFlyoutRef}
                 >
                   <button
-                    aria-controls="generated-data-flyout"
-                    aria-expanded={artifactFlyoutOpen}
+                    aria-controls="generation-examples-flyout"
+                    aria-expanded={exampleFlyoutOpen}
                     aria-haspopup="dialog"
-                    aria-label="Generated data"
+                    aria-label="Try an example"
                     className=" w-6 h-6 flex items-center justify-center rounded-full cursor-pointer  text-[#20221e]"
-                    onClick={() => setArtifactFlyoutOpen((isOpen) => !isOpen)}
-                    title="Generated data"
+                    onClick={() => setExampleFlyoutOpen((isOpen) => !isOpen)}
+                    title="Try an example"
                     type="button"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      height="18px"
-                      viewBox="48 -912 864 864"
-                      width="18px"
-                      fill="#999"
-                    >
-                      <path d="M288-600v-72h528v72H288Zm0 156v-72h528v72H288Zm0 156v-72h528v72H288ZM180-600q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-636q0 14-10.35 25T180-600Zm0 156q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-480q0 14-10.35 25T180-444Zm0 156q-14 0-25-11t-11-25.5q0-14.5 11-25t25.5-10.5q14.5 0 25 10.35T216-324q0 14-10.35 25T180-288Z" />
-                    </svg>
+                    <MessageSquareText
+                      aria-hidden="true"
+                      className="size-[15px] text-[#858880]"
+                    />
                   </button>
-                  {artifactFlyoutOpen && (
+                  {exampleFlyoutOpen && (
                     <section
-                      aria-label="Generated data"
-                      className="absolute bottom-[calc(100%+10px)] left-0 z-40 max-h-[min(60vh,420px)] w-[min(340px,calc(100vw-48px))] overflow-y-auto rounded-xl border border-[#e2e5df] bg-white p-3 text-left shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
-                      id="generated-data-flyout"
+                      aria-label="Generation examples"
+                      className="absolute tracking-tight bottom-[calc(100%+10px)] left-0 z-40 w-[min(340px,calc(100vw-48px))] rounded-xl border border-[#e2e5df] bg-white p-2 text-left shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
+                      id="generation-examples-flyout"
                       role="dialog"
                     >
-                      <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="mb-2 hidden flex items-center justify-between gap-3">
                         <h2 className="text-[12px] font-semibold text-[#373a34]">
-                          Artifacts
+                          Try an example
                         </h2>
                         <span className="text-[10px] text-[#858880]">
-                          {artifacts.length}
+                          Select one to fill the prompt
                         </span>
                       </div>
-                      {artifacts.length === 0 ? (
-                        <p className="px-1 py-3 text-[11px] leading-4 text-[#858880]">
-                          Generated datasets from this chat will appear here.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1">
-                          {artifacts.map((artifact) => (
-                            <li key={artifact.id}>
-                              <button
-                                aria-pressed={activeArtifactId === artifact.id}
-                                className={`flex duration-300 transition-all w-full items-center gap-2 rounded-lg p-2 text-left transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780] ${
-                                  activeArtifactId === artifact.id
-                                    ? "bg-[#f1f5ef]"
-                                    : ""
-                                }`}
-                                onClick={() => {
-                                  const artifactDataset = {
-                                    name: artifact.name,
-                                    fields: artifact.fields,
-                                    records: artifact.records,
-                                    count: artifact.count,
-                                    seed: artifact.seed,
-                                  };
-                                  setDataset(artifactDataset);
-                                  setGeneratedTables([artifactDataset]);
-                                  setActiveArtifactId(artifact.id);
-                                  setShowDataPanel(true);
-                                  setView("table");
-                                  setError("");
-                                  setArtifactFlyoutOpen(false);
-                                }}
-                                type="button"
-                              >
-                                <FileText
-                                  aria-hidden="true"
-                                  className="size-4 shrink-0 text-[#73786d]"
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block capitalize truncate text-[11px] font-medium text-[#373a34]">
-                                    {artifact.name}
-                                  </span>
-                                  <span className="block text-[10px] text-[#858880]">
-                                    {artifact.count} records
-                                  </span>
-                                </span>
-                                <span className="shrink-0 text-[10px] text-[#777a72]">
-                                  Open
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <ul className="space-y-1 ">
+                        {examples.map((example) => (
+                          <li key={example}>
+                            <button
+                              className="w-full rounded-lg  p-2 text-left text-[11px] leading-4 text-[#55584f] transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                              onClick={() => selectExample(example)}
+                              type="button"
+                            >
+                              {example}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     </section>
                   )}
                   <span
@@ -1124,6 +1081,7 @@ export default function GeneratorPanel({
                       showScrollToBottom ? "w-px opacity-100" : "w-0 opacity-0"
                     }`}
                   />
+
                   <button
                     aria-label="Scroll to latest message"
                     aria-hidden={!showScrollToBottom}
@@ -1167,6 +1125,7 @@ export default function GeneratorPanel({
                   onChange={(event) => setPrompt(event.currentTarget.value)}
                   placeholder="Describe the data or paste a schema or code snippet..."
                   required
+                  ref={promptInputRef}
                   value={prompt}
                 />
                 <div className="flex items-center gap-2">

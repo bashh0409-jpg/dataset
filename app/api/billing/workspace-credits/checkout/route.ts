@@ -138,6 +138,13 @@ export async function POST(request: NextRequest) {
 
   const purchaseId = claim.data.purchase_id;
   if (claim.data.status !== "claimed") {
+    const workspaceStatusUrl = () => {
+      const url = new URL("/workspace", siteUrl);
+      url.searchParams.set("workspace_credits", "processing");
+      url.searchParams.set("workspace_id", parsedForm.data.workspace_id);
+      return url;
+    };
+
     let checkoutList;
     try {
       checkoutList = await polar.checkouts.list(
@@ -184,10 +191,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (claim.data.status === "in_progress") {
-      return Response.json(
-        { error: "Checkout is being prepared. Please retry shortly." },
-        { status: 409 },
-      );
+      return NextResponse.redirect(workspaceStatusUrl(), { status: 303 });
     }
 
     const { data: reclaimed, error: reclaimError } = await admin.rpc(
@@ -195,21 +199,19 @@ export async function POST(request: NextRequest) {
       { p_purchase_id: purchaseId, p_purchaser_id: user.id },
     );
     if (reclaimError || reclaimed !== true) {
-      return Response.json(
-        { error: "Checkout is being prepared. Please retry shortly." },
-        { status: 409 },
-      );
+      return NextResponse.redirect(workspaceStatusUrl(), { status: 303 });
     }
   }
 
+  const successUrl = new URL("/workspace", siteUrl);
+  successUrl.searchParams.set("workspace_credits", "success");
+  successUrl.searchParams.set("checkout_id", "{CHECKOUT_ID}");
+
+  let checkout: Awaited<ReturnType<typeof polar.checkouts.create>>;
   try {
-    const successUrl = new URL("/workspace", siteUrl);
-    successUrl.searchParams.set("workspace_credits", "success");
-    successUrl.searchParams.set("checkout_id", "{CHECKOUT_ID}");
-    const checkout = await polar.checkouts.create(
+    checkout = await polar.checkouts.create(
       {
         products: [productId],
-        units: 1,
         external_customer_id: user.id,
         customer_email: user.email ?? undefined,
         success_url: successUrl
@@ -220,32 +222,40 @@ export async function POST(request: NextRequest) {
       },
       { timeout: 15 },
     );
-
-    const { data: saved, error: saveError } = await admin.rpc(
-      "save_workspace_credit_checkout",
-      {
-        p_purchase_id: purchaseId,
-        p_purchaser_id: user.id,
-        p_checkout_id: checkout.id,
-        p_checkout_url: checkout.url,
-        p_expires_at: checkout.expires_at,
-      },
-    );
-    if (saveError || saved !== true) {
-      return Response.json(
-        {
-          error:
-            "Checkout was created but could not be saved. Retry shortly to resume it.",
-        },
-        { status: 503 },
-      );
-    }
-
-    return NextResponse.redirect(checkout.url, { status: 303 });
-  } catch {
+  } catch (error) {
+    console.error("Polar workspace credit checkout creation failed.", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : "Non-Error exception",
+    });
     return Response.json(
       { error: "Unable to start Polar checkout. Please retry shortly." },
       { status: 503 },
     );
   }
+
+  const { data: saved, error: saveError } = await admin.rpc(
+    "save_workspace_credit_checkout",
+    {
+      p_purchase_id: purchaseId,
+      p_purchaser_id: user.id,
+      p_checkout_id: checkout.id,
+      p_checkout_url: checkout.url,
+      p_expires_at: checkout.expires_at,
+    },
+  );
+  if (saveError || saved !== true) {
+    console.error("Unable to save the Polar workspace credit checkout.", {
+      error: saveError,
+      purchaseId,
+    });
+    return Response.json(
+      {
+        error:
+          "Checkout was created but could not be saved. Retry shortly to resume it.",
+      },
+      { status: 503 },
+    );
+  }
+
+  return NextResponse.redirect(checkout.url, { status: 303 });
 }

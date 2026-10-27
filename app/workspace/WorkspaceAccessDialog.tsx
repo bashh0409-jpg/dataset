@@ -14,7 +14,7 @@ type WorkspaceAccessDialogProps = {
   workspaceId: string;
   workspaceName: string;
   isOwner: boolean;
-  creditPurchaseStatus: "success" | "return" | null;
+  creditPurchaseStatus: "success" | "return" | "processing" | null;
   onClose: () => void;
 };
 
@@ -133,7 +133,7 @@ export default function WorkspaceAccessDialog({
         className="w-full max-w-sm rounded-3xl bg-white px-4 pt-4 text-[#111827] shadow-xl"
         role="dialog"
       >
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               {mode === "invite" ? (
@@ -154,29 +154,35 @@ export default function WorkspaceAccessDialog({
                 {title}
               </h2>
             </div>
-
-            <p className="geist text-left  text-sm font-medium leading-4 tracking-tight text-[#999]">
+            <p className="geist text-sm font-medium leading-4 tracking-tight text-[#999]">
               {workspaceName}
             </p>
           </div>
-          <button
-            aria-label="Close dialog"
-            className="rounded p-1 hidden text-[#667085] transition hover:bg-[#f2f4f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3282ff]"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {isOwner && (
+              <form
+                action="/api/billing/workspace-credits/checkout"
+                method="post"
+              >
+                <input name="workspace_id" type="hidden" value={workspaceId} />
+                <button
+                  className="rounded-md bg-black px-3 py-1 text-[12px] font-semibold text-white transition hover:bg-black/70"
+                  type="submit"
+                >
+                  Buy
+                </button>
+              </form>
+            )}
+          </div>
         </header>
 
         {mode === "invite" ? (
           <form className="mt-2" onSubmit={submitInvite}>
             <label className="block text-[13px] font-medium text-[#344054]">
-              Email address
               <input
                 autoFocus
                 autoComplete="email"
-                className="mt-1.5 block h-8 w-full rounded border border-[#d0d5dd] px-3 text-sm outline-none placeholder:text-[#98a2b3] focus:border-[#3282ff] focus:ring-2 focus:ring-[#3282ff]/20"
+                className="mt-4 block h-8 w-full rounded border border-[#d0d5dd] px-3 text-sm outline-none placeholder:text-[#98a2b3] focus:border-[#3282ff] focus:ring-2 focus:ring-[#3282ff]/20"
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="teammate@example.com"
                 required
@@ -237,27 +243,29 @@ export default function WorkspaceAccessDialog({
           </form>
         ) : (
           <div className="mt-5">
+            {creditPurchaseStatus && (
+              <p
+                className="mb-3 rounded-md font-medium bg-[#f2f4f7] px-2.5 py-1 tracking-tight text-[12px] text-[#475467]"
+                role="status"
+              >
+                {creditPurchaseStatus === "success"
+                  ? "Payment returned successfully. Credits appear after Polar confirms it; refresh the balance if needed."
+                  : creditPurchaseStatus === "processing"
+                    ? "Your checkout is still being prepared. Wait a moment, then try buying credits again."
+                    : "Checkout was closed or returned. Credits are added only after Polar confirms payment."}
+              </p>
+            )}
             <section
               aria-label="Workspace AI credits"
               className="mb-4 rounded-md  bg-black/5 p-2 px-3"
             >
-              {creditPurchaseStatus && (
-                <p
-                  className="mb-3 rounded-md bg-[#f2f4f7] px-2.5 py- text-[12px] text-[#475467]"
-                  role="status"
-                >
-                  {creditPurchaseStatus === "success"
-                    ? "Payment returned successfully. Credits appear after Polar confirms it; refresh the balance if needed."
-                    : "Checkout was closed or returned. Credits are added only after Polar confirms payment."}
-                </p>
-              )}
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
                     Workspace AI credits
                   </p>
                 </div>
-               
+
                 <p className="geist text-sm font-medium leading-4 tracking-tight text-[#999]">
                   {creditLoading
                     ? "Loading…"
@@ -279,31 +287,9 @@ export default function WorkspaceAccessDialog({
               >
                 Refresh balance
               </button>
-              {isOwner && (
-                <form
-                  action="/api/billing/workspace-credits/checkout"
-                  className="mt-3"
-                  method="post"
-                >
-                  <input
-                    name="workspace_id"
-                    type="hidden"
-                    value={workspaceId}
-                  />
-                  <button
-                    className="rounded-md bg-black px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-black/70"
-                    type="submit"
-                  >
-                    Buy 500 credits
-                  </button>
-                  <p className="mt-2 text-[11px] text-[#667085]">
-                    Credits are added after Polar confirms payment.
-                  </p>
-                </form>
-              )}
             </section>
             {loading ? (
-              <p className="py-8 text-center font-medium text-sm text-[#999]">
+              <p className="py-8 text-center tracking-tight font-medium text-sm text-[#999]">
                 Loading workspace members...
               </p>
             ) : error ? (

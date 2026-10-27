@@ -191,7 +191,7 @@ export default function WorkspaceShell({
     null,
   );
   const [creditPurchaseStatus, setCreditPurchaseStatus] = useState<
-    "success" | "return" | null
+    "success" | "return" | "processing" | null
   >(null);
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
@@ -244,11 +244,22 @@ export default function WorkspaceShell({
     const frame = window.requestAnimationFrame(() => {
       const url = new URL(window.location.href);
       const purchaseStatus = url.searchParams.get("workspace_credits");
-      if (purchaseStatus !== "success" && purchaseStatus !== "return") return;
+      if (
+        purchaseStatus !== "success" &&
+        purchaseStatus !== "return" &&
+        purchaseStatus !== "processing"
+      ) {
+        return;
+      }
+      const workspaceId = url.searchParams.get("workspace_id");
+      if (workspaceId && workspaces.some((workspace) => workspace.id === workspaceId)) {
+        setActiveWorkspaceId(workspaceId);
+      }
       setCreditPurchaseStatus(purchaseStatus);
       setAccessDialog("manage");
       url.searchParams.delete("workspace_credits");
       url.searchParams.delete("checkout_id");
+      url.searchParams.delete("workspace_id");
       window.history.replaceState(
         null,
         "",
@@ -257,7 +268,7 @@ export default function WorkspaceShell({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [workspaces]);
 
   const activeChats = savedConversations.filter((chat) => !chat.archived);
   const archivedChats = savedConversations.filter((chat) => chat.archived);
