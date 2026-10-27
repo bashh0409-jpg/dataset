@@ -78,10 +78,37 @@ describe("AI-generated schema parsing", () => {
 
     expect(result.status).toBe("ready");
     if (result.status === "ready") {
-      expect(result.request.name).toBe("users");
-      expect(result.request.fields).toHaveLength(3);
+      expect(result.request.tables).toHaveLength(1);
+      expect(result.request.tables[0].name).toBe("users");
+      expect(result.request.tables[0].fields).toHaveLength(3);
       expect(result.request.count).toBe(30);
       expect(result.request.seed).toBe(123);
+    }
+  });
+
+  it("uses the user's clarified count and normalizes generic customer string fields", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        name: "customer",
+        fields: [
+          { name: "uuid", type: "uuid" },
+          { name: "name", type: "string" },
+          { name: "id_number", type: "string" },
+        ],
+      }),
+      123,
+      3,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.count).toBe(3);
+      expect(result.request.tables[0].fields).toMatchObject([
+        { name: "uuid", type: "uuid" },
+        { name: "name", type: "fullName" },
+        { name: "id_number", type: "idNumber" },
+      ]);
     }
   });
 
@@ -132,7 +159,80 @@ describe("AI-generated schema parsing", () => {
 
     expect(result.status).toBe("ready");
     if (result.status === "ready") {
-      expect(result.request.name).toBe("products");
+      expect(result.request.tables[0].name).toBe("products");
+    }
+  });
+
+  it("parses multiple tables and their primary-key references", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        count: 3,
+        tables: [
+          {
+            name: "users",
+            fields: [
+              { name: "id", type: "integer", primaryKey: true },
+              { name: "email", type: "email" },
+            ],
+          },
+          {
+            name: "orders",
+            fields: [
+              { name: "id", type: "integer", primaryKey: true },
+              {
+                name: "user_id",
+                type: "integer",
+                references: { table: "users", field: "id" },
+              },
+            ],
+          },
+        ],
+      }),
+      42,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables).toHaveLength(2);
+      expect(result.request.tables[1].fields[1]).toMatchObject({
+        name: "user_id",
+        references: { table: "users", field: "id" },
+      });
+    }
+  });
+
+  it("accepts a single table returned in the tables array", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        count: 2,
+        tables: [
+          {
+            name: "customer",
+            fields: [
+              { name: "uuid", type: "uuid" },
+              { name: "name", type: "string" },
+              { name: "phone_number", type: "string" },
+            ],
+          },
+        ],
+      }),
+      42,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.count).toBe(2);
+      expect(result.request.tables).toHaveLength(1);
+      expect(result.request.tables[0]).toMatchObject({
+        name: "customer",
+        fields: [
+          { name: "uuid", type: "uuid" },
+          { name: "name", type: "fullName" },
+          { name: "phone_number", type: "phone" },
+        ],
+      });
     }
   });
 

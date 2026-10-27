@@ -11,6 +11,7 @@ const messagesSchema = z
       role: z.enum(["user", "assistant"]),
       content: z.string().trim().min(1).max(4_000),
       generatedArtifactId: z.uuid().optional(),
+      generatedArtifactIds: z.array(z.uuid()).max(10).optional(),
     }),
   )
   .min(1)
@@ -40,6 +41,15 @@ const renameInputSchema = z.object({
   id: conversationIdSchema,
   title: z.string().trim().min(1).max(120),
 });
+const conversationMetadataInputSchema = z
+  .object({
+    id: conversationIdSchema,
+    label: z.string().trim().min(1).max(40).nullable().optional(),
+    color: z
+      .enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"])
+      .optional(),
+  })
+  .refine((input) => input.label !== undefined || input.color !== undefined);
 
 const storedConversationSchema = z.object({
   id: z.uuid(),
@@ -47,6 +57,8 @@ const storedConversationSchema = z.object({
   messages: messagesSchema,
   pinned: z.boolean(),
   archived: z.boolean(),
+  label: z.string().min(1).max(40).nullable(),
+  color: z.enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"]),
   updated_at: z.iso.datetime({ offset: true }),
 });
 
@@ -126,6 +138,8 @@ export type AiConversationSummary = {
   updatedAt: string;
   pinned: boolean;
   archived: boolean;
+  label: string | null;
+  color: "gray" | "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 };
 
 export type AiConversation = AiConversationSummary & {
@@ -157,6 +171,8 @@ function toConversation(
     updatedAt: row.updated_at,
     pinned: row.pinned,
     archived: row.archived,
+    label: row.label,
+    color: row.color,
     artifacts,
   };
 }
@@ -169,7 +185,7 @@ export async function listAiConversations(): Promise<
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
-    .select("id, title, updated_at, pinned, archived")
+    .select("id, title, updated_at, pinned, archived, label, color")
     .eq("user_id", auth.user.id)
     .order("pinned", { ascending: false })
     .order("updated_at", { ascending: false })
@@ -186,6 +202,8 @@ export async function listAiConversations(): Promise<
       updatedAt: row.updated_at,
       pinned: row.pinned,
       archived: row.archived,
+      label: row.label,
+      color: row.color,
     })),
   };
 }
@@ -201,7 +219,7 @@ export async function getAiConversation(
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
-    .select("id, title, messages, pinned, archived, updated_at")
+    .select("id, title, messages, pinned, archived, label, color, updated_at")
     .eq("id", parsedId.data)
     .eq("user_id", auth.user.id)
     .maybeSingle();
@@ -360,7 +378,7 @@ export async function saveAiConversation(
         user_id: auth.user.id,
       });
   const { data, error } = await query
-    .select("id, title, updated_at, pinned, archived")
+    .select("id, title, updated_at, pinned, archived, label, color")
     .single();
 
   if (error || !data) {
@@ -374,6 +392,8 @@ export async function saveAiConversation(
       updatedAt: data.updated_at,
       pinned: data.pinned,
       archived: data.archived,
+      label: data.label,
+      color: data.color,
     },
   };
 }
@@ -392,7 +412,7 @@ export async function setAiConversationPinned(
     .update({ pinned: parsedInput.data.pinned })
     .eq("id", parsedInput.data.id)
     .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived")
+    .select("id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -406,6 +426,8 @@ export async function setAiConversationPinned(
       updatedAt: data.updated_at,
       pinned: data.pinned,
       archived: data.archived,
+      label: data.label,
+      color: data.color,
     },
   };
 }
@@ -427,7 +449,7 @@ export async function setAiConversationArchived(
     })
     .eq("id", parsedInput.data.id)
     .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived")
+    .select("id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -441,6 +463,8 @@ export async function setAiConversationArchived(
       updatedAt: data.updated_at,
       pinned: data.pinned,
       archived: data.archived,
+      label: data.label,
+      color: data.color,
     },
   };
 }
@@ -464,7 +488,7 @@ export async function renameAiConversation(
     })
     .eq("id", parsedInput.data.id)
     .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived")
+    .select("id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -478,6 +502,50 @@ export async function renameAiConversation(
       updatedAt: data.updated_at,
       pinned: data.pinned,
       archived: data.archived,
+      label: data.label,
+      color: data.color,
+    },
+  };
+}
+
+export async function updateAiConversationMetadata(
+  input: unknown,
+): Promise<ConversationResult<AiConversationSummary>> {
+  const parsedInput = conversationMetadataInputSchema.safeParse(input);
+  if (!parsedInput.success) {
+    return { error: "Enter a valid label or conversation color." };
+  }
+
+  const auth = await getAuthenticatedSupabase();
+  if (!auth) {
+    return { error: "Please sign in again to update this conversation." };
+  }
+
+  const { id, ...metadata } = parsedInput.data;
+  const { data, error } = await auth.supabase
+    .from("ai_conversations")
+    .update(metadata)
+    .eq("id", id)
+    .eq("user_id", auth.user.id)
+    .select("id, title, updated_at, pinned, archived, label, color")
+    .maybeSingle();
+
+  if (error || !data) {
+    return {
+      error:
+        "Unable to update conversation details. Apply the conversation labels migration, then try again.",
+    };
+  }
+
+  return {
+    data: {
+      id: data.id,
+      title: data.title,
+      updatedAt: data.updated_at,
+      pinned: data.pinned,
+      archived: data.archived,
+      label: data.label,
+      color: data.color,
     },
   };
 }

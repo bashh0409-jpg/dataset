@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   Search,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -23,9 +24,11 @@ import type { ReactNode } from "react";
 import {
   listAiConversations,
   deleteAiConversation,
+  getAiConversation,
   renameAiConversation,
   setAiConversationArchived,
   setAiConversationPinned,
+  updateAiConversationMetadata,
   type AiConversationSummary,
 } from "@/app/actions/ai-conversations";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -36,6 +39,18 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 
 const Button =
   "w-full rounded-lg flex font-medium tracking-tight cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[12px] text-[#686a64] transition hover:bg-[#f4f5f1] disabled:opacity-50";
+const conversationColorClasses: Record<
+  AiConversationSummary["color"],
+  string
+> = {
+  gray: "bg-[#8b8d86]",
+  red: "bg-[#d4615c]",
+  orange: "bg-[#dc8a45]",
+  yellow: "bg-[#d4b643]",
+  green: "bg-[#61a477]",
+  blue: "bg-[#5a91c6]",
+  purple: "bg-[#9271b5]",
+};
 
 type Workspace = {
   id: string;
@@ -66,6 +81,7 @@ const navigation: {
   id: WorkspaceView;
   label: string;
   icon: ReactNode;
+  comingSoon?: boolean;
 }[] = [
   {
     id: "generate",
@@ -90,6 +106,7 @@ const navigation: {
   {
     id: "activity",
     label: "Activity",
+    comingSoon: true,
     icon: (
       <svg
         aria-hidden="true"
@@ -122,6 +139,7 @@ const navigation: {
   {
     id: "apps",
     label: "Apps",
+    comingSoon: true,
     icon: <LayoutGrid aria-hidden="true" className="size-[14px]" />,
   },
   {
@@ -236,6 +254,8 @@ export default function WorkspaceShell({
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
     workspaces[0];
+  const activeConversation =
+    savedConversations.find((chat) => chat.id === activeConversationId) ?? null;
   const filteredNavigation = useMemo(
     () =>
       navigation.filter((item) =>
@@ -400,18 +420,29 @@ export default function WorkspaceShell({
 
   const saveChatName = async (chat: AiConversationSummary) => {
     const title = renameValue.trim();
-    if (!title) {
+    await renameConversation(chat, title);
+  };
+
+  const renameConversation = async (
+    chat: AiConversationSummary,
+    title: string,
+  ) => {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
       setConversationError("Chat names cannot be empty.");
       return;
     }
-    if (title === chat.title) {
+    if (normalizedTitle === chat.title) {
       setRenamingChatId(null);
       return;
     }
     setUpdatingChatId(chat.id);
     setConversationError("");
     try {
-      const result = await renameAiConversation({ id: chat.id, title });
+      const result = await renameAiConversation({
+        id: chat.id,
+        title: normalizedTitle,
+      });
       if ("error" in result) {
         setConversationError(result.error);
         return;
@@ -422,6 +453,71 @@ export default function WorkspaceShell({
       setConversationError("A network error occurred while renaming the chat.");
     } finally {
       setUpdatingChatId(null);
+    }
+  };
+
+  const updateConversationMetadata = async (
+    chat: AiConversationSummary,
+    metadata: {
+      label?: string | null;
+      color?: AiConversationSummary["color"];
+    },
+  ) => {
+    setUpdatingChatId(chat.id);
+    setConversationError("");
+    try {
+      const result = await updateAiConversationMetadata({
+        id: chat.id,
+        ...metadata,
+      });
+      if ("error" in result) {
+        setConversationError(result.error);
+        return;
+      }
+      updateSavedChat(result.data);
+    } catch {
+      setConversationError(
+        "A network error occurred while updating conversation details.",
+      );
+    } finally {
+      setUpdatingChatId(null);
+    }
+  };
+
+  const exportConversation = async () => {
+    if (!activeConversation) return;
+    setConversationError("");
+    try {
+      const result = await getAiConversation(activeConversation.id);
+      if ("error" in result) {
+        setConversationError(result.error);
+        return;
+      }
+
+      const contents = JSON.stringify(
+        {
+          title: result.data.title,
+          exportedAt: new Date().toISOString(),
+          messages: result.data.messages,
+          generatedTables: result.data.artifacts,
+        },
+        null,
+        2,
+      );
+      const url = URL.createObjectURL(
+        new Blob([contents], { type: "application/json" }),
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${result.data.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 80) || "conversation"}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setConversationError("Unable to export this conversation. Please retry.");
     }
   };
 
@@ -498,9 +594,14 @@ export default function WorkspaceShell({
             type="button"
           >
             <span className="truncate text-[12px] font-medium tracking-[-0.02em] text-[#777a72] max-[640px]:sr-only">
+              <span
+                aria-hidden="true"
+                className={`mr-1.5 inline-block size-1.5 rounded-full align-middle ${conversationColorClasses[chat.color]}`}
+              />
               {chat.title}
             </span>
           </button>
+
           <button
             aria-expanded={openChatMenuId === chat.id}
             aria-label={`Chat options: ${chat.title}`}
@@ -515,6 +616,11 @@ export default function WorkspaceShell({
           >
             <Ellipsis aria-hidden="true" className="size-4" />
           </button>
+          {chat.label && (
+            <span className="max-w-16 fint-medium truncate rounded px-1 text-[9px] text-[#777a72] max-[640px]:hidden">
+              <Tag aria-hidden="true" className="size-3.5 shrink-0" />
+            </span>
+          )}
           {chat.pinned && (
             <Pin
               aria-label="Pinned"
@@ -603,10 +709,10 @@ export default function WorkspaceShell({
               <ArrowRight />
             </button>
             <button
-              aria-label="Activity"
-              className="workspace-toolbar-button cursor-pointer max-[640px]:hidden"
-              onClick={() => setActiveView("activity")}
-              title="Activity"
+              aria-label="Activity (coming soon)"
+              className="workspace-toolbar-button cursor-not-allowed opacity-50 max-[640px]:hidden"
+              disabled
+              title="Activity — coming soon"
               type="button"
             >
               <AtSign />
@@ -680,14 +786,19 @@ export default function WorkspaceShell({
           )}
 
           <nav aria-label="Workspace sections" className="space-y-[2px]">
-            {filteredNavigation.map(({ id, label, icon }) => (
+            {filteredNavigation.map(({ id, label, icon, comingSoon }) => (
               <button
                 aria-current={activeView === id ? "page" : undefined}
-                className={`workspace-section-link  ${
+                aria-disabled={comingSoon || undefined}
+                className={`workspace-section-link ${
                   activeView === id ? "workspace-section-link-active" : ""
-                }`}
+                } ${comingSoon ? "cursor-not-allowed opacity-60" : ""}`}
+                disabled={comingSoon}
                 key={id}
-                onClick={() => setActiveView(id)}
+                onClick={() => {
+                  if (!comingSoon) setActiveView(id);
+                }}
+                title={comingSoon ? `${label} — coming soon` : label}
                 type="button"
               >
                 <span className="ml-2 flex size-[18px] shrink-0 items-center justify-center">
@@ -697,6 +808,11 @@ export default function WorkspaceShell({
                 <span className="truncate font-medium tracking-tight max-[640px]:sr-only">
                   {label}
                 </span>
+                {comingSoon && (
+                  <span className="ml-auto rounded bg-[#f0f1ed] px-1.5 py-0.5 text-[9px] font-medium text-[#858780] max-[640px]:hidden">
+                    Coming soon
+                  </span>
+                )}
               </button>
             ))}
             {searchOpen && filteredNavigation.length === 0 && (
@@ -759,8 +875,6 @@ export default function WorkspaceShell({
                   </p>
                 )}
 
-                
-
                 <button className={Button} type="button">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -808,7 +922,7 @@ export default function WorkspaceShell({
             <button
               aria-expanded={accountOpen}
               aria-label="Account menu"
-              className="flex min-h-[30px] w-full min-w-0 items-center gap-[7px] py-1 rounded-full px-1 pr-3 text-left transition hover:bg-[#f1f2ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
+              className="flex  w-full min-w-0 items-center gap-[7px] py-0.5 rounded-lg px-1 pr-3 text-left transition hover:bg-[#f1f2ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
               onClick={() => setAccountOpen((open) => !open)}
               type="button"
             >
@@ -853,11 +967,42 @@ export default function WorkspaceShell({
         className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden"
       >
         <WorkspaceToolbar
+          activeConversation={activeConversation}
           billingStatusError={billingStatusError}
           isPro={isPro}
           model={aiModel}
+          onArchiveConversation={() =>
+            activeConversation
+              ? toggleChatArchived(activeConversation)
+              : Promise.resolve()
+          }
+          onColorConversation={(color) =>
+            activeConversation
+              ? updateConversationMetadata(activeConversation, { color })
+              : Promise.resolve()
+          }
+          onDeleteConversation={() =>
+            activeConversation
+              ? removeChat(activeConversation)
+              : Promise.resolve()
+          }
+          onExportConversation={exportConversation}
+          onLabelConversation={(label) =>
+            activeConversation
+              ? updateConversationMetadata(activeConversation, { label })
+              : Promise.resolve()
+          }
           onModelChange={setAiModel}
-          onManage={() => setAccessDialog("manage")}
+          onPinConversation={() =>
+            activeConversation
+              ? toggleChatPinned(activeConversation)
+              : Promise.resolve()
+          }
+          onRenameConversation={(title) =>
+            activeConversation
+              ? renameConversation(activeConversation, title)
+              : Promise.resolve()
+          }          onManage={() => setAccessDialog("manage")}
           onInvite={() => setAccessDialog("invite")}
           workspaceName={activeWorkspace?.name ?? "Your workspace"}
         />

@@ -5,6 +5,7 @@ export const MAX_RECORD_COUNT = 500;
 
 export const fieldTypes = [
   "uuid",
+  "idNumber",
   "firstName",
   "lastName",
   "fullName",
@@ -22,7 +23,7 @@ export const fieldTypes = [
 
 export type FieldType = (typeof fieldTypes)[number];
 
-const fieldSchema = z
+export const generatorFieldSchema = z
   .object({
     name: z
       .string()
@@ -57,7 +58,7 @@ const fieldSchema = z
 export const generatorRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
-    fields: z.array(fieldSchema).min(1).max(25),
+    fields: z.array(generatorFieldSchema).min(1).max(25),
     count: z.number().int().min(1).max(MAX_RECORD_COUNT),
     seed: z.number().int().min(0).max(2_147_483_647),
   })
@@ -86,6 +87,8 @@ function generateValue(
   switch (field.type) {
     case "uuid":
       return faker.string.uuid();
+    case "idNumber":
+      return `TEST-${faker.string.uuid().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
     case "firstName":
       return faker.person.firstName();
     case "lastName":
@@ -143,4 +146,194 @@ export function recordsToCsv(
   );
 
   return [header, ...rows].join("\r\n");
+}
+
+const relationalFieldSchema = generatorFieldSchema.extend({
+  primaryKey: z.boolean().optional(),
+  references: z
+    .object({
+      table: z.string().trim().min(1).max(80),
+      field: z.string().trim().min(1).max(40),
+    })
+    .optional(),
+});
+
+export const relationalGeneratorRequestSchema = z
+  .object({
+    tables: z
+      .array(
+        z.object({
+          name: z
+            .string()
+            .trim()
+            .min(1)
+            .max(80)
+            .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+          fields: z.array(relationalFieldSchema).min(1).max(25),
+        }),
+      )
+      .min(1)
+      .max(10),
+    count: z.number().int().min(1).max(MAX_RECORD_COUNT),
+    seed: z.number().int().min(0).max(2_147_483_647),
+  })
+  .superRefine((request, context) => {
+    if (request.tables.length * request.count > 2_000) {
+      context.addIssue({
+        code: "custom",
+        message: "A request can generate at most 2,000 records across all tables.",
+        path: ["count"],
+      });
+    }
+
+    const tablesByName = new Map(
+      request.tables.map((table) => [table.name, table]),
+    );
+    if (tablesByName.size !== request.tables.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Table names must be unique.",
+        path: ["tables"],
+      });
+    }
+
+    const dependencies = new Map<string, Set<string>>();
+    for (const [tableIndex, table] of request.tables.entries()) {
+      const fieldNames = new Set(table.fields.map((field) => field.name));
+      if (fieldNames.size !== table.fields.length) {
+        context.addIssue({
+          code: "custom",
+          message: `Field names in table "${table.name}" must be unique.`,
+          path: ["tables", tableIndex, "fields"],
+        });
+      }
+
+      const primaryKeys = table.fields.filter((field) => field.primaryKey);
+      if (primaryKeys.length > 1) {
+        context.addIssue({
+          code: "custom",
+          message: `Table "${table.name}" can define only one primary key.`,
+          path: ["tables", tableIndex, "fields"],
+        });
+      }
+
+      dependencies.set(table.name, new Set());
+      for (const [fieldIndex, field] of table.fields.entries()) {
+        if (!field.references) continue;
+        const targetTable = tablesByName.get(field.references.table);
+        const targetField = targetTable?.fields.find(
+          (candidate) => candidate.name === field.references?.field,
+        );
+        if (
+          !targetTable ||
+          !targetField?.primaryKey ||
+          targetField.type !== field.type ||
+          targetTable.name === table.name
+        ) {
+          context.addIssue({
+            code: "custom",
+            message: `Reference "${table.name}.${field.name}" must target a compatible primary key in another table.`,
+            path: ["tables", tableIndex, "fields", fieldIndex, "references"],
+          });
+          continue;
+        }
+        dependencies.get(table.name)?.add(targetTable.name);
+      }
+    }
+
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const visit = (tableName: string) => {
+      if (visiting.has(tableName)) return false;
+      if (visited.has(tableName)) return true;
+      visiting.add(tableName);
+      for (const dependency of dependencies.get(tableName) ?? []) {
+        if (!visit(dependency)) return false;
+      }
+      visiting.delete(tableName);
+      visited.add(tableName);
+      return true;
+    };
+
+    for (const table of request.tables) {
+      if (!visit(table.name)) {
+        context.addIssue({
+          code: "custom",
+          message: "Table relationships cannot contain cycles.",
+          path: ["tables"],
+        });
+        break;
+      }
+    }
+  });
+
+export type RelationalGeneratorRequest = z.infer<
+  typeof relationalGeneratorRequestSchema
+>;
+export type GeneratedTable = {
+  name: string;
+  fields: GeneratorRequest["fields"];
+  records: GeneratedRecord[];
+  count: number;
+  seed: number;
+};
+
+export function generateRelationalTables(
+  input: RelationalGeneratorRequest,
+): GeneratedTable[] {
+  const request = relationalGeneratorRequestSchema.parse(input);
+  const pending = new Map(request.tables.map((table) => [table.name, table]));
+  const generated = new Map<string, GeneratedRecord[]>();
+  const output: GeneratedTable[] = [];
+
+  while (pending.size > 0) {
+    const next = [...pending.values()].find((table) =>
+      table.fields.every(
+        (field) =>
+          !field.references || generated.has(field.references.table),
+      ),
+    );
+    if (!next) {
+      throw new Error("Unable to resolve table generation order.");
+    }
+
+    const tableSeed =
+      (request.seed + request.tables.findIndex((table) => table.name === next.name)) %
+      2_147_483_648;
+    faker.seed(tableSeed);
+    const records = Array.from({ length: request.count }, (_, rowIndex) =>
+      Object.fromEntries(
+        next.fields.map((field) => {
+          if (field.references) {
+            const parentRecords = generated.get(field.references.table);
+            if (!parentRecords?.length) {
+              throw new Error("Referenced table has no generated records.");
+            }
+            const parent = faker.helpers.arrayElement(parentRecords);
+            return [field.name, parent[field.references.field]];
+          }
+          if (field.primaryKey && field.type === "integer") {
+            return [field.name, rowIndex + 1];
+          }
+          return [field.name, generateValue(field)];
+        }),
+      ),
+    );
+
+    generated.set(next.name, records);
+    output.push({
+      name: next.name,
+      fields: next.fields.map((field) => ({
+        name: field.name,
+        type: field.type,
+        ...(field.options ? { options: field.options } : {}),
+      })),
+      records,
+      count: request.count,
+      seed: tableSeed,
+    });
+    pending.delete(next.name);
+  }
+
+  return output;
 }
