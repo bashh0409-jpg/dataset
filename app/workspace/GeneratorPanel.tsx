@@ -9,6 +9,8 @@ import {
   Download,
   LoaderCircle,
   MessageSquareText,
+  PanelRightClose,
+  PanelRightOpen,
   Settings,
   Trash2,
 } from "lucide-react";
@@ -93,6 +95,7 @@ const examples = [
 ];
 
 type GeneratorPanelProps = {
+  workspaceId: string;
   isPro: boolean;
   model: "qwen" | "auto" | "claude" | "openai";
   requestedConversationId: string | null;
@@ -101,6 +104,7 @@ type GeneratorPanelProps = {
 };
 
 export default function GeneratorPanel({
+  workspaceId,
   isPro,
   model,
   requestedConversationId,
@@ -123,6 +127,7 @@ export default function GeneratorPanel({
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [artifactFlyoutOpen, setArtifactFlyoutOpen] = useState(false);
   const [view, setView] = useState<DataView>("table");
+  const [showDataPanel, setShowDataPanel] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generationPhase, setGenerationPhase] =
@@ -270,7 +275,7 @@ export default function GeneratorPanel({
     if (!requestedConversationId) return;
     let active = true;
 
-    void getAiConversation(requestedConversationId)
+    void getAiConversation({ id: requestedConversationId, workspaceId })
       .then((result) => {
         if (!active) return;
         if ("error" in result) {
@@ -302,13 +307,17 @@ export default function GeneratorPanel({
     return () => {
       active = false;
     };
-  }, [requestedConversationId, onConversationOpened]);
+  }, [requestedConversationId, onConversationOpened, workspaceId]);
 
   const persistConversation = async (
     messages: ConversationMessage[],
     id: string | null,
   ) => {
-    const result = await saveAiConversation({ id: id ?? undefined, messages });
+    const result = await saveAiConversation({
+      id: id ?? undefined,
+      workspaceId,
+      messages,
+    });
     if ("error" in result) {
       setSaveError(result.error);
       return null;
@@ -359,6 +368,7 @@ export default function GeneratorPanel({
       count: request.count,
       seed: request.seed,
     });
+    setShowDataPanel(true);
     setGeneratedTables([]);
     setArtifacts([]);
     setActiveArtifactId(null);
@@ -407,6 +417,7 @@ export default function GeneratorPanel({
       const result = await generateWithAi({
         messages: messages.slice(-8),
         model: isPro ? model : "qwen",
+        workspaceId,
       });
 
       window.clearTimeout(phaseTimeout);
@@ -444,6 +455,7 @@ export default function GeneratorPanel({
       }));
       setGeneratedTables(datasets);
       setDataset(datasets[0] ?? null);
+      setShowDataPanel(true);
       setView("table");
       setCopied(false);
       const tableSummary = tables
@@ -661,25 +673,27 @@ export default function GeneratorPanel({
             </button>
           </div>
         </div>
-        <div
-          className="flex h-full items-center gap-1"
-          role="tablist"
-          aria-label="Generated data format"
-        >
-          {(["table", "json", "csv"] as const).map((format) => {
-            return (
-              <button
-                aria-selected={view === format}
-                className={`h-full flex items-center gap-1 rounded-t-lg px-2 cursor-pointer text-[12px] transition ${
-                  view === format
-                    ? "bg-white font-medium text-[#252721]"
-                    : "font-medium text-[#666961] hover:bg-white/60 hover:text-[#252721]"
-                }`}
-                key={format}
-                onClick={() => setView(format)}
-                role="tab"
-                type="button"
-              >
+        <div className="flex h-full min-w-0 items-center justify-end gap-1">
+          {showDataPanel && (
+            <div
+              className="flex h-full min-w-0 items-center gap-1"
+              role="tablist"
+              aria-label="Generated data format"
+            >
+              {(["table", "json", "csv"] as const).map((format) => {
+                return (
+                  <button
+                    aria-selected={view === format}
+                    className={`h-full flex items-center gap-1 rounded-t-lg px-2 cursor-pointer text-[12px] transition ${
+                      view === format
+                        ? "bg-white font-medium text-[#252721]"
+                        : "font-medium text-[#666961] hover:bg-white/60 hover:text-[#252721]"
+                    }`}
+                    key={format}
+                    onClick={() => setView(format)}
+                    role="tab"
+                    type="button"
+                  >
                 {format === "table" ? (
                   <svg
                     aria-hidden="true"
@@ -706,10 +720,13 @@ export default function GeneratorPanel({
                   <p>[ ]</p>
                 )}
                 {format === "table" ? "Table" : format.toUpperCase()}
-              </button>
-            );
-          })}
-          <span className="ml-auto flex items-center  gap-1">
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {showDataPanel && (
+            <span className="ml-auto flex min-w-0 items-center gap-1">
             {dataset && (
               <span className="shrink-0 mx- font-semibold uppercase rounded-t-lg text-[10px]  tracking-tight capitalize  text-[#696c64]">
                 {dataset.count} rows
@@ -761,11 +778,32 @@ export default function GeneratorPanel({
             >
               <Download aria-hidden="true" className="size-4" />
             </button>
-          </span>
+            </span>
+          )}
+          <button
+            aria-label={showDataPanel ? "Hide output panel" : "Show output panel"}
+            aria-pressed={showDataPanel}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#666961] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
+            onClick={() => setShowDataPanel((visible) => !visible)}
+            title={showDataPanel ? "Hide output panel" : "Show output panel"}
+            type="button"
+          >
+            {showDataPanel ? (
+              <PanelRightClose aria-hidden="true" className="size-4" />
+            ) : (
+              <PanelRightOpen aria-hidden="true" className="size-4" />
+            )}
+          </button>
         </div>
       </header>
 
-      <div className="grid h-0 min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden md:grid-cols-2 md:grid-rows-1">
+      <div
+        className={`grid h-0 min-h-0 flex-1 grid-cols-1 overflow-hidden ${
+          showDataPanel
+            ? "grid-rows-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-2 md:grid-rows-1"
+            : "grid-rows-1"
+        }`}
+      >
         {mode === "agent" ? (
           <section
             aria-label="AI data prompt"
@@ -901,6 +939,7 @@ export default function GeneratorPanel({
                                 });
                                 setActiveArtifactId(linkedArtifact.id);
                               }
+                              setShowDataPanel(true);
                               setView("table");
                               setError("");
                             }}
@@ -940,7 +979,7 @@ export default function GeneratorPanel({
                     TypeScript, SQL, or Prisma schema.
                   </p>
 
-                  <div className="mt-5 hidden flex-col gap-1">
+                  <div className="mt-5 hidde flex-col gap-1">
                     {examples.map((example) => (
                       <button
                         className="w-full px-3 py-2 text-left text-[12px] text-[#62655e] transition-colors hover:bg-black/[0.03] hover:text-[#252721]"
@@ -1050,6 +1089,7 @@ export default function GeneratorPanel({
                                   setDataset(artifactDataset);
                                   setGeneratedTables([artifactDataset]);
                                   setActiveArtifactId(artifact.id);
+                                  setShowDataPanel(true);
                                   setView("table");
                                   setError("");
                                   setArtifactFlyoutOpen(false);
@@ -1341,7 +1381,7 @@ export default function GeneratorPanel({
           </section>
         )}
 
-        <section
+        {showDataPanel && <section
           aria-label="Generated data"
           className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white"
         >
@@ -1458,7 +1498,7 @@ export default function GeneratorPanel({
               </pre>
             )}
           </div>
-        </section>
+        </section>}
       </div>
     </div>
   );

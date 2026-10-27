@@ -27,7 +27,7 @@ async function WorkspaceContent() {
 
   const { data: memberships, error } = await supabase
     .from("workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, role")
     .eq("user_id", user.id);
 
   if (error) {
@@ -106,7 +106,13 @@ async function WorkspaceContent() {
         lastUsedAt: key.last_used_at,
         revokedAt: key.revoked_at,
       }))}
-      workspaces={workspaces ?? []}
+      workspaces={(workspaces ?? []).map((workspace) => ({
+        ...workspace,
+        role:
+          memberships.find(
+            (membership) => membership.workspace_id === workspace.id,
+          )?.role ?? "member",
+      }))}
     />
   );
 }

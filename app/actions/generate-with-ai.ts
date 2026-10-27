@@ -21,6 +21,7 @@ import {
 } from "@/lib/generator/sql-schema";
 
 const generationInputSchema = z.object({
+  workspaceId: z.uuid(),
   messages: z
     .array(
       z.object({
@@ -223,7 +224,7 @@ export async function generateWithAi(
     }
   }
 
-  const { funding } = parsedInput.data;
+  const { funding, workspaceId } = parsedInput.data;
   const requestedModel = parsedInput.data.model;
   const requestedProvider =
     requestedModel === "claude" || requestedModel === "openai"
@@ -242,6 +243,7 @@ export async function generateWithAi(
   let providerReservationId: string | null = null;
   let providerAdmin: ReturnType<typeof createSupabaseAdminClient> | null = null;
   let modelNotice: string | undefined;
+  let useFreeModelFallback = false;
   const releaseProviderReservation = async () => {
     if (!providerReservationId) return;
     if (!providerAdmin) {
@@ -354,11 +356,55 @@ export async function generateWithAi(
       };
     }
     if (reservation === "rate_limited") {
+      useFreeModelFallback = true;
       modelNotice =
         "You've reached the Pro model limit of 20 requests per 3 hours, so this request used the Free model instead.";
     } else if (reservation === "monthly_limit") {
-      modelNotice =
-        "Your included Pro model allowance is used up, so this request used the Free model instead.";
+      if (funding === "included") {
+        const { data: creditData, error: creditError } = await supabase.rpc(
+          "reserve_workspace_credit",
+          { p_workspace_id: workspaceId },
+        );
+        const parsedCredit = z
+          .discriminatedUnion("status", [
+            z.object({
+              status: z.literal("allowed"),
+              balance: z.number().int().nonnegative(),
+            }),
+            z.object({
+              status: z.enum([
+                "insufficient",
+                "not_authenticated",
+                "not_a_member",
+              ]),
+              balance: z.number().int().nonnegative().optional(),
+            }),
+          ])
+          .safeParse(creditData);
+
+        if (creditError || !parsedCredit.success) {
+          return {
+            error: "Unable to verify workspace credits. Please try again.",
+          };
+        }
+        if (parsedCredit.data.status === "not_authenticated") {
+          return { error: "Please sign in again to use workspace credits." };
+        }
+        if (parsedCredit.data.status === "not_a_member") {
+          return { error: "You don't have access to this workspace's credits." };
+        }
+        if (parsedCredit.data.status === "allowed") {
+          modelNotice = `Your included Pro allowance is used up; 1 workspace credit was used. ${parsedCredit.data.balance} credits remain.`;
+        } else {
+          useFreeModelFallback = true;
+          modelNotice =
+            "Your included Pro model allowance and the workspace credit balance are used up, so this request used the Free model instead.";
+        }
+      } else {
+        useFreeModelFallback = true;
+        modelNotice =
+          "Your included Pro model allowance is used up, so this request used the Free model instead.";
+      }
     } else if (reservation !== "allowed") {
       return { error: "Unable to reserve Pro AI usage. Please try again." };
     } else if (funding === "included") {
@@ -375,7 +421,7 @@ export async function generateWithAi(
       proAiUsage = { used: count ?? 1, limit: 50 };
     }
 
-    if (!modelNotice) {
+    if (!useFreeModelFallback) {
       const admin = providerAdmin;
       if (!admin) {
         return {

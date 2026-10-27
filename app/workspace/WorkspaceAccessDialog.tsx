@@ -3,6 +3,7 @@
 import { Check, Mail, UsersRound, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { createWorkspaceInvite } from "@/app/actions/onboarding";
+import { getWorkspaceCreditBalance } from "@/app/actions/workspace-credits";
 import {
   getWorkspaceMembers,
   type WorkspaceMember,
@@ -12,6 +13,8 @@ type WorkspaceAccessDialogProps = {
   mode: "invite" | "manage";
   workspaceId: string;
   workspaceName: string;
+  isOwner: boolean;
+  creditPurchaseStatus: "success" | "return" | null;
   onClose: () => void;
 };
 
@@ -19,6 +22,8 @@ export default function WorkspaceAccessDialog({
   mode,
   workspaceId,
   workspaceName,
+  isOwner,
+  creditPurchaseStatus,
   onClose,
 }: WorkspaceAccessDialogProps) {
   const [email, setEmail] = useState("");
@@ -27,11 +32,49 @@ export default function WorkspaceAccessDialog({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(mode === "manage");
   const [submitting, setSubmitting] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditError, setCreditError] = useState("");
+  const [creditLoading, setCreditLoading] = useState(mode === "manage");
+
+  const refreshCredits = async () => {
+    setCreditLoading(true);
+    setCreditError("");
+    try {
+      const result = await getWorkspaceCreditBalance(workspaceId);
+      if ("error" in result) {
+        setCreditError(result.error);
+        return;
+      }
+      setCreditBalance(result.data.balance);
+    } catch {
+      setCreditError("Unable to load workspace credits. Please try again.");
+    } finally {
+      setCreditLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (mode !== "manage") return;
 
     let cancelled = false;
+    void getWorkspaceCreditBalance(workspaceId)
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setCreditError(result.error);
+          return;
+        }
+        setCreditBalance(result.data.balance);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCreditError("Unable to load workspace credits. Please try again.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCreditLoading(false);
+      });
+
     void getWorkspaceMembers(workspaceId)
       .then((result) => {
         if (cancelled) return;
@@ -87,34 +130,38 @@ export default function WorkspaceAccessDialog({
       <section
         aria-labelledby="workspace-access-title"
         aria-modal="true"
-        className="w-full max-w-md rounded-xl border border-[#e5e7eb] bg-white p-5 text-[#111827] shadow-xl"
+        className="w-full max-w-sm rounded-3xl bg-white px-4 pt-4 text-[#111827] shadow-xl"
         role="dialog"
       >
         <header className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               {mode === "invite" ? (
-                <Mail aria-hidden="true" className="size-4 text-[#667085]" />
+                <Mail
+                  aria-hidden="true"
+                  className="size-4 hidden text-[#667085]"
+                />
               ) : (
                 <UsersRound
                   aria-hidden="true"
-                  className="size-4 text-[#667085]"
+                  className="size-4 hidden text-[#667085]"
                 />
               )}
               <h2
-                className="text-[16px] font-semibold tracking-tight"
+                className="text-[16px] hidden font-semibold tracking-tight"
                 id="workspace-access-title"
               >
                 {title}
               </h2>
             </div>
-            <p className="geist mt-2 text-xs font-medium leading-4 tracking-tight text-[#999]">
+
+            <p className="geist text-left  text-sm font-medium leading-4 tracking-tight text-[#999]">
               {workspaceName}
             </p>
           </div>
           <button
             aria-label="Close dialog"
-            className="rounded p-1 text-[#667085] transition hover:bg-[#f2f4f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3282ff]"
+            className="rounded p-1 hidden text-[#667085] transition hover:bg-[#f2f4f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3282ff]"
             onClick={onClose}
             type="button"
           >
@@ -123,7 +170,7 @@ export default function WorkspaceAccessDialog({
         </header>
 
         {mode === "invite" ? (
-          <form className="mt-5" onSubmit={submitInvite}>
+          <form className="mt-2" onSubmit={submitInvite}>
             <label className="block text-[13px] font-medium text-[#344054]">
               Email address
               <input
@@ -166,19 +213,19 @@ export default function WorkspaceAccessDialog({
                 {error}
               </p>
             )}
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-2 mb-2 flex justify-end gap-2">
               <button
                 onClick={onClose}
                 type="button"
                 className="geist mt-4 text-lef justify-center item-center w-fit bg-transparent p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-[#999] transition duration-400 hover:bg-black/6 cursor-pointer"
               >
-                Close
+                Cancel
               </button>
 
               <button
                 disabled={submitting || !email.trim()}
                 type="submit"
-                className="geist disabled:cursor-not-allowed disabled:opacity-50  mt-4 text-lef justify-center item-center w-fit bg-black p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-white transition duration-400 hover:bg-black/60 cursor-pointer"
+                className="geist disabled:cursor-not-allowed  disabled:opacity-50  mt-4 text-lef justify-center item-center w-fit bg-black p-2 rounded  text-[13px] font-semibold leading-3 tracking-tight text-white transition duration-400 hover:bg-black/60 cursor-pointer"
               >
                 {submitting
                   ? "Sending invitation..."
@@ -190,6 +237,71 @@ export default function WorkspaceAccessDialog({
           </form>
         ) : (
           <div className="mt-5">
+            <section
+              aria-label="Workspace AI credits"
+              className="mb-4 rounded-md  bg-black/5 p-2 px-3"
+            >
+              {creditPurchaseStatus && (
+                <p
+                  className="mb-3 rounded-md bg-[#f2f4f7] px-2.5 py- text-[12px] text-[#475467]"
+                  role="status"
+                >
+                  {creditPurchaseStatus === "success"
+                    ? "Payment returned successfully. Credits appear after Polar confirms it; refresh the balance if needed."
+                    : "Checkout was closed or returned. Credits are added only after Polar confirms payment."}
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
+                    Workspace AI credits
+                  </p>
+                </div>
+               
+                <p className="geist text-sm font-medium leading-4 tracking-tight text-[#999]">
+                  {creditLoading
+                    ? "Loading…"
+                    : creditBalance === null
+                      ? "Unavailable"
+                      : `${creditBalance} credits`}
+                </p>
+              </div>
+              {creditError && (
+                <p className="mt-2 text-[12px] text-[#b42318]" role="alert">
+                  {creditError}
+                </p>
+              )}
+              <button
+                className="mt-2 text-[11px] hidden font-medium text-[#667085] underline-offset-2 hover:underline disabled:opacity-50"
+                disabled={creditLoading}
+                onClick={() => void refreshCredits()}
+                type="button"
+              >
+                Refresh balance
+              </button>
+              {isOwner && (
+                <form
+                  action="/api/billing/workspace-credits/checkout"
+                  className="mt-3"
+                  method="post"
+                >
+                  <input
+                    name="workspace_id"
+                    type="hidden"
+                    value={workspaceId}
+                  />
+                  <button
+                    className="rounded-md bg-black px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-black/70"
+                    type="submit"
+                  >
+                    Buy 500 credits
+                  </button>
+                  <p className="mt-2 text-[11px] text-[#667085]">
+                    Credits are added after Polar confirms payment.
+                  </p>
+                </form>
+              )}
+            </section>
             {loading ? (
               <p className="py-8 text-center font-medium text-sm text-[#999]">
                 Loading workspace members...
@@ -212,9 +324,8 @@ export default function WorkspaceAccessDialog({
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#eff4ff] text-[12px] font-semibold uppercase text-[#3538cd]">
                       {(member.name || member.email || "?").slice(0, 1)}
                     </span>
-                    
+
                     <div className="min-w-0 flex-1">
-                    
                       <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
                         {member.name || member.email || "Workspace member"}
                       </p>
@@ -232,15 +343,6 @@ export default function WorkspaceAccessDialog({
                 ))}
               </ul>
             )}
-            <div className="mt-4 flex justify-end">
-              <button
-                className="h-8 rounded-md border border-[#d0d5dd] px-3 text-[13px] font-medium text-[#344054] hover:bg-[#f9fafb]"
-                onClick={onClose}
-                type="button"
-              >
-                Done
-              </button>
-            </div>
           </div>
         )}
       </section>

@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generatorRequestSchema } from "@/lib/generator/engine";
 
 const conversationIdSchema = z.uuid();
+const workspaceIdSchema = z.uuid();
 const messagesSchema = z
   .array(
     z.object({
@@ -24,41 +25,50 @@ const messagesSchema = z
 
 const saveInputSchema = z.object({
   id: conversationIdSchema.optional(),
+  workspaceId: workspaceIdSchema,
   messages: messagesSchema,
 });
 
 const updatePinnedInputSchema = z.object({
   id: conversationIdSchema,
+  workspaceId: workspaceIdSchema,
   pinned: z.boolean(),
 });
 
 const updateArchivedInputSchema = z.object({
   id: conversationIdSchema,
+  workspaceId: workspaceIdSchema,
   archived: z.boolean(),
 });
 
 const renameInputSchema = z.object({
   id: conversationIdSchema,
+  workspaceId: workspaceIdSchema,
   title: z.string().trim().min(1).max(120),
 });
 const conversationMetadataInputSchema = z
   .object({
     id: conversationIdSchema,
+    workspaceId: workspaceIdSchema,
     label: z.string().trim().min(1).max(40).nullable().optional(),
     color: z
       .enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"])
+      .nullable()
       .optional(),
   })
   .refine((input) => input.label !== undefined || input.color !== undefined);
 
 const storedConversationSchema = z.object({
   id: z.uuid(),
+  workspace_id: z.uuid().nullable(),
   title: z.string().min(1).max(120),
   messages: messagesSchema,
   pinned: z.boolean(),
   archived: z.boolean(),
   label: z.string().min(1).max(40).nullable(),
-  color: z.enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"]),
+  color: z
+    .enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"])
+    .nullable(),
   updated_at: z.iso.datetime({ offset: true }),
 });
 
@@ -134,12 +144,13 @@ export type AiGeneratedArtifact = {
 
 export type AiConversationSummary = {
   id: string;
+  workspaceId: string;
   title: string;
   updatedAt: string;
   pinned: boolean;
   archived: boolean;
   label: string | null;
-  color: "gray" | "red" | "orange" | "yellow" | "green" | "blue" | "purple";
+  color: "gray" | "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
 };
 
 export type AiConversation = AiConversationSummary & {
@@ -160,12 +171,51 @@ async function getAuthenticatedSupabase() {
   return { supabase, user };
 }
 
+type AuthenticatedSupabase = NonNullable<
+  Awaited<ReturnType<typeof getAuthenticatedSupabase>>
+>;
+type WorkspaceAccess =
+  | {
+      supabase: AuthenticatedSupabase["supabase"];
+      user: AuthenticatedSupabase["user"];
+      role: string;
+    }
+  | { error: string };
+
+async function getWorkspaceAccess(
+  workspaceId: string,
+): Promise<WorkspaceAccess> {
+  const auth = await getAuthenticatedSupabase();
+  if (!auth) return { error: "Please sign in again to access this workspace." } as const;
+
+  const { data: membership, error } = await auth.supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (error) {
+    return { error: "Unable to verify workspace access. Please try again." };
+  }
+  if (!membership) {
+    return { error: "You don't have access to this workspace." } as const;
+  }
+
+  return {
+    supabase: auth.supabase,
+    user: auth.user,
+    role: membership.role,
+  } as const;
+}
+
 function toConversation(
   row: z.infer<typeof storedConversationSchema>,
   artifacts: AiGeneratedArtifact[],
 ): AiConversation {
   return {
     id: row.id,
+    workspaceId: row.workspace_id ?? "",
     title: row.title,
     messages: row.messages,
     updatedAt: row.updated_at,
@@ -177,16 +227,20 @@ function toConversation(
   };
 }
 
-export async function listAiConversations(): Promise<
+export async function listAiConversations(input: unknown): Promise<
   ConversationResult<AiConversationSummary[]>
 > {
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to view saved chats." };
+  const parsedWorkspaceId = workspaceIdSchema.safeParse(input);
+  if (!parsedWorkspaceId.success) {
+    return { error: "Select a valid workspace to view saved chats." };
+  }
+  const auth = await getWorkspaceAccess(parsedWorkspaceId.data);
+  if ("error" in auth) return auth;
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
-    .select("id, title, updated_at, pinned, archived, label, color")
-    .eq("user_id", auth.user.id)
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
+    .eq("workspace_id", parsedWorkspaceId.data)
     .order("pinned", { ascending: false })
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -198,6 +252,7 @@ export async function listAiConversations(): Promise<
   return {
     data: data.map((row) => ({
       id: row.id,
+      workspaceId: row.workspace_id,
       title: row.title,
       updatedAt: row.updated_at,
       pinned: row.pinned,
@@ -211,17 +266,19 @@ export async function listAiConversations(): Promise<
 export async function getAiConversation(
   input: unknown,
 ): Promise<ConversationResult<AiConversation>> {
-  const parsedId = conversationIdSchema.safeParse(input);
-  if (!parsedId.success) return { error: "Saved chat not found." };
+  const parsedInput = z
+    .object({ id: conversationIdSchema, workspaceId: workspaceIdSchema })
+    .safeParse(input);
+  if (!parsedInput.success) return { error: "Saved chat not found." };
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to open saved chats." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
-    .select("id, title, messages, pinned, archived, label, color, updated_at")
-    .eq("id", parsedId.data)
-    .eq("user_id", auth.user.id)
+    .select("id, workspace_id, title, messages, pinned, archived, label, color, updated_at")
+    .eq("id", parsedInput.data.id)
+    .eq("workspace_id", parsedInput.data.workspaceId)
     .maybeSingle();
 
   if (error || !data) {
@@ -236,8 +293,7 @@ export async function getAiConversation(
   const { data: artifactRows, error: artifactsError } = await auth.supabase
     .from("ai_generated_artifacts")
     .select("id, name, fields, records, count, seed, created_at")
-    .eq("conversation_id", parsedId.data)
-    .eq("user_id", auth.user.id)
+    .eq("conversation_id", parsedInput.data.id)
     .order("created_at", { ascending: true });
 
   if (artifactsError) {
@@ -348,8 +404,8 @@ export async function saveAiConversation(
     };
   }
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to save this chat." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
   const firstUserMessage = parsedInput.data.messages.find(
     (message) => message.role === "user",
@@ -371,14 +427,15 @@ export async function saveAiConversation(
         .from("ai_conversations")
         .update(values)
         .eq("id", parsedInput.data.id)
-        .eq("user_id", auth.user.id)
+        .eq("workspace_id", parsedInput.data.workspaceId)
     : auth.supabase.from("ai_conversations").insert({
         ...values,
         title,
         user_id: auth.user.id,
+        workspace_id: parsedInput.data.workspaceId,
       });
   const { data, error } = await query
-    .select("id, title, updated_at, pinned, archived, label, color")
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
     .single();
 
   if (error || !data) {
@@ -388,6 +445,7 @@ export async function saveAiConversation(
   return {
     data: {
       id: data.id,
+      workspaceId: data.workspace_id,
       title: data.title,
       updatedAt: data.updated_at,
       pinned: data.pinned,
@@ -404,15 +462,15 @@ export async function setAiConversationPinned(
   const parsedInput = updatePinnedInputSchema.safeParse(input);
   if (!parsedInput.success) return { error: "Saved chat not found." };
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to pin saved chats." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
     .update({ pinned: parsedInput.data.pinned })
     .eq("id", parsedInput.data.id)
-    .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived, label, color")
+    .eq("workspace_id", parsedInput.data.workspaceId)
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -422,6 +480,7 @@ export async function setAiConversationPinned(
   return {
     data: {
       id: data.id,
+      workspaceId: data.workspace_id,
       title: data.title,
       updatedAt: data.updated_at,
       pinned: data.pinned,
@@ -438,8 +497,8 @@ export async function setAiConversationArchived(
   const parsedInput = updateArchivedInputSchema.safeParse(input);
   if (!parsedInput.success) return { error: "Saved chat not found." };
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to archive saved chats." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
@@ -448,8 +507,8 @@ export async function setAiConversationArchived(
       updated_at: new Date().toISOString(),
     })
     .eq("id", parsedInput.data.id)
-    .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived, label, color")
+    .eq("workspace_id", parsedInput.data.workspaceId)
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -459,6 +518,7 @@ export async function setAiConversationArchived(
   return {
     data: {
       id: data.id,
+      workspaceId: data.workspace_id,
       title: data.title,
       updatedAt: data.updated_at,
       pinned: data.pinned,
@@ -477,8 +537,8 @@ export async function renameAiConversation(
     return { error: "Chat names must be between 1 and 120 characters." };
   }
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to rename saved chats." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
@@ -487,8 +547,8 @@ export async function renameAiConversation(
       updated_at: new Date().toISOString(),
     })
     .eq("id", parsedInput.data.id)
-    .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived, label, color")
+    .eq("workspace_id", parsedInput.data.workspaceId)
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -498,6 +558,7 @@ export async function renameAiConversation(
   return {
     data: {
       id: data.id,
+      workspaceId: data.workspace_id,
       title: data.title,
       updatedAt: data.updated_at,
       pinned: data.pinned,
@@ -516,18 +577,16 @@ export async function updateAiConversationMetadata(
     return { error: "Enter a valid label or conversation color." };
   }
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) {
-    return { error: "Please sign in again to update this conversation." };
-  }
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
 
-  const { id, ...metadata } = parsedInput.data;
+  const { id, workspaceId, ...metadata } = parsedInput.data;
   const { data, error } = await auth.supabase
     .from("ai_conversations")
     .update(metadata)
     .eq("id", id)
-    .eq("user_id", auth.user.id)
-    .select("id, title, updated_at, pinned, archived, label, color")
+    .eq("workspace_id", workspaceId)
+    .select("id, workspace_id, title, updated_at, pinned, archived, label, color")
     .maybeSingle();
 
   if (error || !data) {
@@ -540,6 +599,7 @@ export async function updateAiConversationMetadata(
   return {
     data: {
       id: data.id,
+      workspaceId: data.workspace_id,
       title: data.title,
       updatedAt: data.updated_at,
       pinned: data.pinned,
@@ -553,17 +613,22 @@ export async function updateAiConversationMetadata(
 export async function deleteAiConversation(
   input: unknown,
 ): Promise<ConversationResult<{ id: string }>> {
-  const parsedId = conversationIdSchema.safeParse(input);
-  if (!parsedId.success) return { error: "Saved chat not found." };
+  const parsedInput = z
+    .object({ id: conversationIdSchema, workspaceId: workspaceIdSchema })
+    .safeParse(input);
+  if (!parsedInput.success) return { error: "Saved chat not found." };
 
-  const auth = await getAuthenticatedSupabase();
-  if (!auth) return { error: "Please sign in again to delete saved chats." };
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
+  if (auth.role !== "owner") {
+    return { error: "Only the workspace owner can delete conversations." };
+  }
 
   const { data, error } = await auth.supabase
     .from("ai_conversations")
     .delete()
-    .eq("id", parsedId.data)
-    .eq("user_id", auth.user.id)
+    .eq("id", parsedInput.data.id)
+    .eq("workspace_id", parsedInput.data.workspaceId)
     .select("id")
     .maybeSingle();
 

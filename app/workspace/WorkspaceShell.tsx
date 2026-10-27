@@ -40,7 +40,7 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 const Button =
   "w-full rounded-lg flex font-medium tracking-tight cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[12px] text-[#686a64] transition hover:bg-[#f4f5f1] disabled:opacity-50";
 const conversationColorClasses: Record<
-  AiConversationSummary["color"],
+  Exclude<AiConversationSummary["color"], null>,
   string
 > = {
   gray: "bg-[#8b8d86]",
@@ -55,6 +55,7 @@ const conversationColorClasses: Record<
 type Workspace = {
   id: string;
   name: string;
+  role: "owner" | "member";
 };
 
 type AiModel = "qwen" | "auto" | "claude" | "openai";
@@ -121,6 +122,12 @@ const navigation: {
     ),
   },
   {
+    id: "apps",
+    label: "Apps",
+    comingSoon: true,
+    icon: <LayoutGrid aria-hidden="true" className="size-[14px]" />,
+  },
+  {
     id: "schemas",
     label: "Schemas",
     icon: (
@@ -136,12 +143,7 @@ const navigation: {
       </svg>
     ),
   },
-  {
-    id: "apps",
-    label: "Apps",
-    comingSoon: true,
-    icon: <LayoutGrid aria-hidden="true" className="size-[14px]" />,
-  },
+
   {
     id: "developer",
     label: "Console key",
@@ -188,6 +190,9 @@ export default function WorkspaceShell({
   const [accessDialog, setAccessDialog] = useState<"invite" | "manage" | null>(
     null,
   );
+  const [creditPurchaseStatus, setCreditPurchaseStatus] = useState<
+    "success" | "return" | null
+  >(null);
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(
@@ -209,19 +214,6 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const restoreFrame = window.requestAnimationFrame(() => {
-      const conversationId = window.localStorage.getItem(
-        "synthetic.activeConversationId",
-      );
-      if (!conversationId) return;
-      setRequestedConversationId(conversationId);
-      setActiveConversationId(conversationId);
-    });
-
-    return () => window.cancelAnimationFrame(restoreFrame);
-  }, []);
 
   useEffect(() => {
     if (
@@ -248,12 +240,34 @@ export default function WorkspaceShell({
     return () => window.clearInterval(refreshInterval);
   }, [isPro, router]);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const url = new URL(window.location.href);
+      const purchaseStatus = url.searchParams.get("workspace_credits");
+      if (purchaseStatus !== "success" && purchaseStatus !== "return") return;
+      setCreditPurchaseStatus(purchaseStatus);
+      setAccessDialog("manage");
+      url.searchParams.delete("workspace_credits");
+      url.searchParams.delete("checkout_id");
+      window.history.replaceState(
+        null,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   const activeChats = savedConversations.filter((chat) => !chat.archived);
   const archivedChats = savedConversations.filter((chat) => chat.archived);
 
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
     workspaces[0];
+  const selectedWorkspaceId = activeWorkspace?.id;
+  const canDeleteConversations = activeWorkspace?.role === "owner";
+  const conversationStorageKey = `synthetic.activeConversationId.${activeWorkspace?.id ?? ""}`;
   const activeConversation =
     savedConversations.find((chat) => chat.id === activeConversationId) ?? null;
   const filteredNavigation = useMemo(
@@ -265,8 +279,28 @@ export default function WorkspaceShell({
   );
 
   useEffect(() => {
+    if (!selectedWorkspaceId) return;
     let active = true;
-    void listAiConversations()
+    const restoreFrame = window.requestAnimationFrame(() => {
+      if (!active) return;
+      const conversationId = window.localStorage.getItem(
+        `synthetic.activeConversationId.${selectedWorkspaceId}`,
+      );
+      if (!conversationId) return;
+      setRequestedConversationId(conversationId);
+      setActiveConversationId(conversationId);
+    });
+
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(restoreFrame);
+    };
+  }, [selectedWorkspaceId]);
+
+  useEffect(() => {
+    if (!selectedWorkspaceId) return;
+    let active = true;
+    void listAiConversations(selectedWorkspaceId)
       .then((result) => {
         if (!active) return;
         if ("error" in result) {
@@ -284,7 +318,7 @@ export default function WorkspaceShell({
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedWorkspaceId]);
 
   const handleChatSaved = useCallback((conversation: AiConversationSummary) => {
     setSavedConversations((current) =>
@@ -297,7 +331,7 @@ export default function WorkspaceShell({
         .slice(0, 50),
     );
     window.localStorage.setItem(
-      "synthetic.activeConversationId",
+      `synthetic.activeConversationId.${conversation.workspaceId}`,
       conversation.id,
     );
     setActiveConversationId(conversation.id);
@@ -322,6 +356,7 @@ export default function WorkspaceShell({
     try {
       const result = await setAiConversationPinned({
         id: chat.id,
+        workspaceId: chat.workspaceId,
         pinned: !chat.pinned,
       });
       if ("error" in result) {
@@ -338,7 +373,7 @@ export default function WorkspaceShell({
   };
 
   const startNewChat = () => {
-    window.localStorage.removeItem("synthetic.activeConversationId");
+    window.localStorage.removeItem(conversationStorageKey);
     setRequestedConversationId(null);
     setActiveConversationId(null);
     setNewConversationToken((token) => token + 1);
@@ -346,8 +381,20 @@ export default function WorkspaceShell({
     setConversationError("");
   };
 
+  const switchWorkspace = (workspaceId: string) => {
+    if (workspaceId === activeWorkspaceId) return;
+    setActiveWorkspaceId(workspaceId);
+    setSavedConversations([]);
+    setRequestedConversationId(null);
+    setActiveConversationId(null);
+    setNewConversationToken((token) => token + 1);
+    setOpenChatMenuId(null);
+    setRenamingChatId(null);
+    setConversationError("");
+  };
+
   const openSavedChat = (id: string) => {
-    window.localStorage.setItem("synthetic.activeConversationId", id);
+    window.localStorage.setItem(conversationStorageKey, id);
     setRequestedConversationId(id);
     setActiveConversationId(id);
     setActiveView("generate");
@@ -360,6 +407,7 @@ export default function WorkspaceShell({
     try {
       const result = await setAiConversationArchived({
         id: chat.id,
+        workspaceId: chat.workspaceId,
         archived: !chat.archived,
       });
       if ("error" in result) {
@@ -376,6 +424,10 @@ export default function WorkspaceShell({
   };
 
   const removeChat = async (chat: AiConversationSummary) => {
+    if (!canDeleteConversations) {
+      setConversationError("Only the workspace owner can delete conversations.");
+      return;
+    }
     if (
       !window.confirm(
         `Delete "${chat.title}" and its generated data? This cannot be undone.`,
@@ -388,7 +440,10 @@ export default function WorkspaceShell({
     setUpdatingChatId(chat.id);
     setConversationError("");
     try {
-      const result = await deleteAiConversation(chat.id);
+      const result = await deleteAiConversation({
+        id: chat.id,
+        workspaceId: chat.workspaceId,
+      });
       if ("error" in result) {
         setConversationError(result.error);
         return;
@@ -399,7 +454,9 @@ export default function WorkspaceShell({
       );
       setOpenChatMenuId(null);
       if (activeConversationId === result.data.id) {
-        window.localStorage.removeItem("synthetic.activeConversationId");
+        window.localStorage.removeItem(
+          `synthetic.activeConversationId.${chat.workspaceId}`,
+        );
         setActiveConversationId(null);
         setRequestedConversationId(null);
         setNewConversationToken((token) => token + 1);
@@ -441,6 +498,7 @@ export default function WorkspaceShell({
     try {
       const result = await renameAiConversation({
         id: chat.id,
+        workspaceId: chat.workspaceId,
         title: normalizedTitle,
       });
       if ("error" in result) {
@@ -468,6 +526,7 @@ export default function WorkspaceShell({
     try {
       const result = await updateAiConversationMetadata({
         id: chat.id,
+        workspaceId: chat.workspaceId,
         ...metadata,
       });
       if ("error" in result) {
@@ -488,7 +547,10 @@ export default function WorkspaceShell({
     if (!activeConversation) return;
     setConversationError("");
     try {
-      const result = await getAiConversation(activeConversation.id);
+      const result = await getAiConversation({
+        id: activeConversation.id,
+        workspaceId: activeConversation.workspaceId,
+      });
       if ("error" in result) {
         setConversationError(result.error);
         return;
@@ -596,7 +658,9 @@ export default function WorkspaceShell({
             <span className="truncate text-[12px] font-medium tracking-[-0.02em] text-[#777a72] max-[640px]:sr-only">
               <span
                 aria-hidden="true"
-                className={`mr-1.5 inline-block size-1.5 rounded-full align-middle ${conversationColorClasses[chat.color]}`}
+                className={`mr-1.5 inline-block size-1.5 rounded-full align-middle ${
+                  chat.color ? conversationColorClasses[chat.color] : ""
+                }`}
               />
               {chat.title}
             </span>
@@ -665,16 +729,18 @@ export default function WorkspaceShell({
                 <Archive aria-hidden="true" className="size-3.5" />
                 {chat.archived ? "Unarchive" : "Archive"}
               </button>
-              <button
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#a64239] hover:bg-[#fff4f2] disabled:opacity-50"
-                disabled={updatingChatId === chat.id}
-                onClick={() => void removeChat(chat)}
-                role="menuitem"
-                type="button"
-              >
-                <Trash2 aria-hidden="true" className="size-3.5" />
-                Delete
-              </button>
+              {canDeleteConversations && (
+                <button
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#a64239] hover:bg-[#fff4f2] disabled:opacity-50"
+                  disabled={updatingChatId === chat.id}
+                  onClick={() => void removeChat(chat)}
+                  role="menuitem"
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" className="size-3.5" />
+                  Delete
+                </button>
+              )}
             </div>
           )}
         </>
@@ -752,7 +818,7 @@ export default function WorkspaceShell({
                 <select
                   aria-label="Select workspace"
                   className="absolute inset-0 size-full cursor-pointer opacity-0"
-                  onChange={(event) => setActiveWorkspaceId(event.target.value)}
+                  onChange={(event) => switchWorkspace(event.target.value)}
                   value={activeWorkspaceId}
                 >
                   {workspaces.map((workspace) => (
@@ -809,7 +875,7 @@ export default function WorkspaceShell({
                   {label}
                 </span>
                 {comingSoon && (
-                  <span className="ml-auto rounded bg-[#f0f1ed] px-1.5 py-0.5 text-[9px] font-medium text-[#858780] max-[640px]:hidden">
+                  <span className="ml-auto rounded  px-1.5 py-0.5 text-xs tracking-tight lowercase font-medium text-[#858780] max-[640px]:hidden">
                     Coming soon
                   </span>
                 )}
@@ -826,8 +892,16 @@ export default function WorkspaceShell({
             <p className="truncate mb-2 text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
               Saved Chats
             </p>
+            {conversationError && (
+              <p
+                className="px-1 py-1 rounded bg-[#ffebee] mb-2  text-[10px] tracking-tight font-medium leading-tight text-[#a64239]"
+                role="alert"
+              >
+                {conversationError}
+              </p>
+            )}
             {activeChats.length === 0 ? (
-              <p className="truncate mb-1 text-[12px] font-medium tracking-[-0.02em] text-[#999] max-[640px]:sr-only">
+              <p className="truncate mb-1 text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
                 No saved chats yet
               </p>
             ) : (
@@ -853,14 +927,6 @@ export default function WorkspaceShell({
                   </div>
                 )}
               </div>
-            )}
-            {conversationError && (
-              <p
-                className="px-1 py-1 text-[10px] leading-4 text-[#a64239]"
-                role="alert"
-              >
-                {conversationError}
-              </p>
             )}
           </section>
         </div>
@@ -986,6 +1052,7 @@ export default function WorkspaceShell({
               ? removeChat(activeConversation)
               : Promise.resolve()
           }
+          canDeleteConversation={canDeleteConversations}
           onExportConversation={exportConversation}
           onLabelConversation={(label) =>
             activeConversation
@@ -1002,14 +1069,20 @@ export default function WorkspaceShell({
             activeConversation
               ? renameConversation(activeConversation, title)
               : Promise.resolve()
-          }          onManage={() => setAccessDialog("manage")}
+          }
+          onManage={() => setAccessDialog("manage")}
           onInvite={() => setAccessDialog("invite")}
           workspaceName={activeWorkspace?.name ?? "Your workspace"}
         />
         {accessDialog && activeWorkspace && (
           <WorkspaceAccessDialog
+            isOwner={activeWorkspace.role === "owner"}
             mode={accessDialog}
-            onClose={() => setAccessDialog(null)}
+            onClose={() => {
+              setAccessDialog(null);
+              setCreditPurchaseStatus(null);
+            }}
+            creditPurchaseStatus={creditPurchaseStatus}
             workspaceId={activeWorkspace.id}
             workspaceName={activeWorkspace.name}
           />
@@ -1023,6 +1096,7 @@ export default function WorkspaceShell({
           <div className="absolute inset-0 min-h-0 overflow-hidden">
             <GeneratorPanel
               key={newConversationToken}
+              workspaceId={activeWorkspace?.id ?? ""}
               isPro={isPro}
               model={aiModel}
               onChatSaved={handleChatSaved}

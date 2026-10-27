@@ -37,6 +37,7 @@ type WorkspaceToolbarProps = {
     color: AiConversationSummary["color"],
   ) => Promise<void>;
   onDeleteConversation: () => Promise<void>;
+  canDeleteConversation: boolean;
   onModelChange: (model: "qwen" | "auto" | "claude" | "openai") => void;
   onManage: () => void;
   onInvite: () => void;
@@ -58,6 +59,7 @@ export default function WorkspaceToolbar({
   onLabelConversation,
   onColorConversation,
   onDeleteConversation,
+  canDeleteConversation,
   onModelChange,
   onManage,
   onInvite,
@@ -65,7 +67,6 @@ export default function WorkspaceToolbar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
-  const [labelValue, setLabelValue] = useState("");
   const [credits, setCredits] = useState("Loading credits…");
   const [creditsError, setCreditsError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -135,6 +136,7 @@ export default function WorkspaceToolbar({
     label: string;
     className: string;
   }[] = [
+    { value: null, label: "No color", className: "bg-white" },
     { value: "gray", label: "Gray", className: "bg-[#8b8d86]" },
     { value: "red", label: "Red", className: "bg-[#d4615c]" },
     { value: "orange", label: "Orange", className: "bg-[#dc8a45]" },
@@ -169,12 +171,7 @@ export default function WorkspaceToolbar({
           aria-haspopup="menu"
           aria-label="Conversation options"
           className="rounded p-1 text-[#686a64] transition hover:bg-gray-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
-          onClick={() =>
-            setMenuOpen((open) => {
-              if (!open) setLabelValue(activeConversation?.label ?? "");
-              return !open;
-            })
-          }
+          onClick={() => setMenuOpen((open) => !open)}
           title="Conversation options"
           type="button"
         >
@@ -183,7 +180,7 @@ export default function WorkspaceToolbar({
         {menuOpen && (
           <div
             aria-label="Conversation options"
-            className="absolute left-0 top-[calc(100%+8px)] z-50 max-h-[min(80vh,620px)] w-[min(300px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-[#e7e8e4] bg-white p-2 text-[#41433d] shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
+            className="absolute left-0 top-[calc(100%+8px)] z-50 max-h-[min(80vh,620px)] w-[min(250px,calc(100vw-24px))] overflow-y-auto rounded-lg border border-[#e7e8e4] bg-white p-2 text-[#41433d] shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
             role="menu"
           >
             <label className="relative flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2.5 text-xs font-medium tracking-tight transition hover:bg-[#f7f8f5]">
@@ -247,7 +244,9 @@ export default function WorkspaceToolbar({
                 <path d="M240-160q-66 0-113-47T80-320v-320q0-66 47-113t113-47h480q66 0 113 47t47 113v320q0 66-47 113t-113 47H240Zm0-480h480q22 0 42 5t38 16v-21q0-33-23.5-56.5T720-720H240q-33 0-56.5 23.5T160-640v21q18-11 38-16t42-5Zm-74 130 445 108q9 2 18 0t17-8l139-116q-11-15-28-24.5t-37-9.5H240q-26 0-45.5 13.5T166-510Z" />
               </svg>
 
-              <p className="text-[11px] leading-4 text-[#555850]">{credits}</p>
+              <p className="text-xs font-medium tracking-tight leading-4  text-[#555850]">
+                {credits}
+              </p>
               {creditsError && (
                 <p className="text-[10px] text-[#a64239]" role="status">
                   {creditsError}
@@ -349,42 +348,40 @@ export default function WorkspaceToolbar({
                   {activeConversation.archived ? "Unarchive" : "Archive"}
                 </button>
                 <div className="my-1 border-t border-[#eff0ec]" />
-                <form
-                  className="flex items-center gap-2 px-2.5 py-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
+                <button
+                  aria-label={
+                    activeConversation.label === "important"
+                      ? "Remove important label"
+                      : "Label conversation as important"
+                  }
+                  className="flex w-full font-medium  tracking-tight items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[#f4f5f1] disabled:opacity-50"
+                  disabled={busyAction !== ""}
+                  onClick={() => {
                     void runAction("label", async () => {
-                      await onLabelConversation(labelValue.trim() || null);
+                      await onLabelConversation(
+                        activeConversation.label === "important"
+                          ? null
+                          : "important",
+                      );
                     });
                   }}
+                  role="menuitem"
+                  type="button"
                 >
                   <Tag aria-hidden="true" className="size-3.5 shrink-0" />
-                  <input
-                    aria-label="Conversation label"
-                    className="h-7 min-w-0 flex-1 rounded border border-[#e2e5df] px-1.5 text-xs font-medium tracking-tight outline-none focus:border-[#aeb3a9]"
-                    maxLength={40}
-                    onChange={(event) =>
-                      setLabelValue(event.currentTarget.value)
-                    }
-                    placeholder="Add label"
-                    value={labelValue}
-                  />
-                  <button
-                    aria-label="Save conversation label"
-                    className="flex size-7 font-medium  tracking-tight items-center justify-center rounded hover:bg-[#f4f5f1] disabled:opacity-50"
-                    disabled={busyAction !== ""}
-                    type="submit"
-                  >
-                    {busyAction === "label" ? (
-                      <LoaderCircle
-                        aria-hidden="true"
-                        className="size-3.5 animate-spin"
-                      />
-                    ) : (
-                      <Check aria-hidden="true" className="size-3.5" />
-                    )}
-                  </button>
-                </form>
+                  <span className="flex-1">
+                    {activeConversation.label === "important"
+                      ? "Labelled as important"
+                      : "Label as important"}
+                  </span>
+
+                  {busyAction === "label" ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="size-3.5 animate-spin"
+                    />
+                  ) : null}
+                </button>
                 <div className="flex  items-center gap-2 px-2.5 py-2">
                   <span className="text-xs font-medium  tracking-tight">
                     Color
@@ -394,7 +391,7 @@ export default function WorkspaceToolbar({
                       <button
                         aria-label={`${option.label} conversation color`}
                         aria-checked={activeConversation.color === option.value}
-                        className={`size-4 rounded-full ${option.className} ${
+                        className={`relative size-4 rounded-full border border-[#dfe2da] ${option.className} ${
                           activeConversation.color === option.value
                             ? "outline outline-2 outline-offset-2 outline-[#555850]"
                             : ""
@@ -408,21 +405,32 @@ export default function WorkspaceToolbar({
                         }
                         role="menuitemradio"
                         type="button"
-                      />
+                      >
+                        {option.value === null && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute left-0 top-1/2 h-px w-full -rotate-45 bg-[#858780]"
+                          />
+                        )}
+                      </button>
                     ))}
                   </div>
                 </div>
                 <div className="my-1 border-t border-[#eff0ec]" />
-                <button
-                  className="flex w-full items-center font-medium tracking-tight gap-2 rounded-md px-2.5 py-2 text-left text-xs text-[#a64239] hover:bg-[#fff4f2] disabled:opacity-50"
-                  disabled={busyAction !== ""}
-                  onClick={() => void runAction("delete", onDeleteConversation)}
-                  role="menuitem"
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" className="size-3.5" />
-                  Delete conversation
-                </button>{" "}
+                {canDeleteConversation && (
+                  <button
+                    className="flex w-full items-center font-medium tracking-tight gap-2 rounded-md px-2.5 py-2 text-left text-xs text-[#a64239] hover:bg-[#fff4f2] disabled:opacity-50"
+                    disabled={busyAction !== ""}
+                    onClick={() =>
+                      void runAction("delete", onDeleteConversation)
+                    }
+                    role="menuitem"
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="size-3.5" />
+                    Delete conversation
+                  </button>
+                )}
                 <div className="my-1 border-t border-[#eff0ec]" />
                 <a
                   className="flex font-medium  tracking-tight items-center gap-2 rounded-md px-2.5 py-2 text-xs text-[#555850] hover:bg-[#f4f5f1]"
@@ -434,7 +442,7 @@ export default function WorkspaceToolbar({
                 </a>
               </>
             ) : (
-              <p className="px-2 py-3 text-xs text-[#777a72]">
+              <p className="px-2 font-semibold tracking-tight py-3 text-xs text-[#777a72]">
                 Save a conversation first to manage its options.
               </p>
             )}

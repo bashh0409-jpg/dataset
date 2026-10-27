@@ -1,5 +1,6 @@
 import { models, webhooks } from "@polar-sh/sdk/2026-10";
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 async function syncSubscription(
@@ -76,6 +77,37 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (event.type) {
+      case "order.paid": {
+        const creditsProductId = process.env.POLAR_WORKSPACE_CREDITS_PRODUCT_ID;
+        if (
+          creditsProductId &&
+          event.data.product_id === creditsProductId &&
+          event.data.paid
+        ) {
+          const metadata = z
+            .object({ workspace_credit_purchase_id: z.uuid() })
+            .safeParse(event.data.metadata);
+          if (!metadata.success) {
+            throw new Error("Workspace credit order is missing purchase metadata.");
+          }
+
+          const supabase = createSupabaseAdminClient();
+          const { error } = await supabase.rpc(
+            "apply_workspace_credit_purchase",
+            {
+              p_webhook_event_id: eventId,
+              p_event_type: event.type,
+              p_purchase_id: metadata.data.workspace_credit_purchase_id,
+              p_order_id: event.data.id,
+              p_product_id: creditsProductId,
+            },
+          );
+          if (error) {
+            throw new Error("Unable to apply the workspace credit purchase.");
+          }
+        }
+        break;
+      }
       case "subscription.created":
       case "subscription.updated":
       case "subscription.active":
