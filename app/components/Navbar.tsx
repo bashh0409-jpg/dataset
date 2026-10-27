@@ -19,7 +19,10 @@ const Navbar = () => {
   const [signInError, setSignInError] = useState("");
   const navRef = useRef<HTMLElement>(null);
   const closeSignIn = useCallback(() => setSignInOpen(false), []);
-  const hideNav = pathname === "/workspace" || pathname.startsWith("/workspace/");
+  const hideNav =
+    pathname === "/billing/success" ||
+    pathname === "/workspace" ||
+    pathname.startsWith("/workspace/");
 
   useEffect(() => {
     let frame = 0;

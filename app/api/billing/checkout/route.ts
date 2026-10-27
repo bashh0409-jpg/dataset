@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const successUrl = new URL("/workspace?billing=success", siteUrl);
+    const successUrl = new URL("/billing/success", siteUrl);
     successUrl.searchParams.set("checkout_id", "{CHECKOUT_ID}");
     const checkout = await polar.checkouts.create(
       {
