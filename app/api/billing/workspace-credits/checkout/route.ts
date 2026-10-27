@@ -1,7 +1,11 @@
 import { createPolar } from "@polar-sh/sdk/2026-10";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getPolarEnvironment, getPolarReturnUrl } from "@/lib/billing/polar";
+import {
+  getPolarEnvironment,
+  getPolarReturnUrl,
+  isSameOriginRequest,
+} from "@/lib/billing/polar";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -23,21 +27,15 @@ export async function POST(request: NextRequest) {
   let siteUrl: string;
   try {
     siteUrl = getPolarReturnUrl();
-    const requestOrigin = request.headers.get("origin");
-    const fetchSite = request.headers.get("sec-fetch-site");
-    if (
-      !requestOrigin ||
-      new URL(requestOrigin).origin !== siteUrl ||
-      fetchSite === "cross-site"
-    ) {
-      return Response.json(
-        { error: "Invalid checkout request origin." },
-        { status: 403 },
-      );
-    }
   } catch {
     return Response.json(
       { error: "Unable to verify checkout request origin." },
+      { status: 403 },
+    );
+  }
+  if (!isSameOriginRequest(request)) {
+    return Response.json(
+      { error: "Invalid checkout request origin." },
       { status: 403 },
     );
   }
