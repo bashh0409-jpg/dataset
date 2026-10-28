@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   listAiConversations,
@@ -216,6 +216,9 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
+  const conversationListRequestsRef = useRef(
+    new Map<string, ReturnType<typeof listAiConversations>>(),
+  );
 
   useEffect(() => {
     if (
@@ -313,7 +316,32 @@ export default function WorkspaceShell({
   useEffect(() => {
     if (!selectedWorkspaceId) return;
     let active = true;
-    void listAiConversations(selectedWorkspaceId)
+    let request = conversationListRequestsRef.current.get(selectedWorkspaceId);
+    if (!request) {
+      request = listAiConversations(selectedWorkspaceId);
+      conversationListRequestsRef.current.set(selectedWorkspaceId, request);
+      const requestToClear = request;
+      void request.then(
+        () => {
+          if (
+            conversationListRequestsRef.current.get(selectedWorkspaceId) ===
+            requestToClear
+          ) {
+            conversationListRequestsRef.current.delete(selectedWorkspaceId);
+          }
+        },
+        () => {
+          if (
+            conversationListRequestsRef.current.get(selectedWorkspaceId) ===
+            requestToClear
+          ) {
+            conversationListRequestsRef.current.delete(selectedWorkspaceId);
+          }
+        },
+      );
+    }
+
+    void request
       .then((result) => {
         if (!active) return;
         if ("error" in result) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Check, LoaderCircle, Send } from "lucide-react";
+import { AtSign, Check, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   createWorkspaceMention,
@@ -38,90 +38,84 @@ export default function WorkspaceMentions({
   const [composerOpen, setComposerOpen] = useState(false);
   const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   const refreshMentions = useCallback(async () => {
-    try {
-      const result = await getWorkspaceMentions(workspaceId);
-      if ("error" in result) {
-        setError(result.error);
-        return;
-      }
-      const unreadMentionIds = open
-        ? result.data.mentions
-            .filter((mention) => mention.isMentioned && !mention.readAt)
-            .map((mention) => mention.id)
-        : [];
-      if (unreadMentionIds.length > 0) {
-        const marked = await markWorkspaceMentionsRead({
-          workspaceId,
-          mentionIds: unreadMentionIds,
-        });
-        if ("error" in marked) {
-          setError(marked.error);
-          setMentions(result.data.mentions);
-          setUnreadCount(result.data.unreadCount);
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+
+    const request = (async () => {
+      try {
+        const result = await getWorkspaceMentions(workspaceId);
+        if ("error" in result) {
+          setError(result.error);
           return;
         }
-      }
+        const unreadMentionIds = openRef.current
+          ? result.data.mentions
+              .filter((mention) => mention.isMentioned && !mention.readAt)
+              .map((mention) => mention.id)
+          : [];
+        if (unreadMentionIds.length > 0) {
+          const marked = await markWorkspaceMentionsRead({
+            workspaceId,
+            mentionIds: unreadMentionIds,
+          });
+          if ("error" in marked) {
+            setError(marked.error);
+            setMentions(result.data.mentions);
+            setUnreadCount(result.data.unreadCount);
+            return;
+          }
+        }
 
-      const readAt = new Date().toISOString();
-      setMentions(
-        result.data.mentions.map((mention) =>
-          unreadMentionIds.includes(mention.id)
-            ? { ...mention, readAt }
-            : mention,
-        ),
-      );
-      setUnreadCount(
-        Math.max(0, result.data.unreadCount - unreadMentionIds.length),
-      );
-      setError("");
-    } catch {
-      setError("Unable to load workspace mentions. Please try again.");
+        const readAt = new Date().toISOString();
+        setMentions(
+          result.data.mentions.map((mention) =>
+            unreadMentionIds.includes(mention.id)
+              ? { ...mention, readAt }
+              : mention,
+          ),
+        );
+        setUnreadCount(
+          Math.max(0, result.data.unreadCount - unreadMentionIds.length),
+        );
+        setError("");
+      } catch {
+        setError("Unable to load workspace mentions. Please try again.");
+      }
+    })();
+
+    refreshPromiseRef.current = request;
+    try {
+      await request;
+    } finally {
+      if (refreshPromiseRef.current === request) {
+        refreshPromiseRef.current = null;
+      }
     }
-  }, [open, workspaceId]);
+  }, [workspaceId]);
 
   const openMentions = async () => {
+    openRef.current = true;
     setOpen(true);
     setComposerOpen(false);
     setError("");
     setLoading(true);
     try {
-      const membersResult = await getWorkspaceMembers(workspaceId);
+      const [membersResult] = await Promise.all([
+        getWorkspaceMembers(workspaceId),
+        refreshMentions(),
+      ]);
       if ("error" in membersResult) {
         setError(membersResult.error);
         return;
       }
-      const mentionsResult = await getWorkspaceMentions(workspaceId);
-      if ("error" in mentionsResult) {
-        setError(mentionsResult.error);
-        return;
-      }
       setMembers(membersResult.data);
-      setMentions(mentionsResult.data.mentions);
-      setUnreadCount(mentionsResult.data.unreadCount);
-
-      const unreadMentionIds = mentionsResult.data.mentions
-        .filter((mention) => mention.isMentioned && !mention.readAt)
-        .map((mention) => mention.id);
-      if (unreadMentionIds.length > 0) {
-        const marked = await markWorkspaceMentionsRead({
-          workspaceId,
-          mentionIds: unreadMentionIds,
-        });
-        if ("error" in marked) {
-          setError(marked.error);
-          return;
-        }
-        setMentions((current) =>
-          current.map((mention) =>
-            unreadMentionIds.includes(mention.id)
-              ? { ...mention, readAt: new Date().toISOString() }
-              : mention,
-          ),
-        );
-        setUnreadCount(0);
-      }
     } catch {
       setError("Unable to load mentions. Please try again.");
     } finally {
@@ -130,17 +124,14 @@ export default function WorkspaceMentions({
   };
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(() => {
-      void refreshMentions();
-    }, 0);
+    void refreshMentions();
     const interval = window.setInterval(() => {
       if (!document.hidden) void refreshMentions();
-    }, open ? 15_000 : 30_000);
+    }, 60_000);
     return () => {
-      window.clearTimeout(initialLoad);
       window.clearInterval(interval);
     };
-  }, [open, refreshMentions]);
+  }, [refreshMentions]);
 
   useEffect(() => {
     if (!open) return;
@@ -251,7 +242,7 @@ export default function WorkspaceMentions({
           className="absolute left-0 top-[calc(100%+6px)] z-[70] flex max-h-[min(78vh,620px)] w-[min(300px,calc(100vw-84px))] flex-col overflow-hidden rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
           role="dialog"
         >
-          <header className="flex py-0.5 shrink-0 items-center justify-between border-b border-[#e7e8e4] px-3">
+          <header className="flex py-0.5 shrink-0 items-center justify-between border-b border-[#e7e8e4] px-1">
             <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
               Mentions
             </h2>

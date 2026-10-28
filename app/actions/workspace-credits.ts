@@ -4,6 +4,12 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const workspaceIdSchema = z.uuid();
+const workspaceCreditSchema = z.array(
+  z.object({
+    workspace_id: z.uuid(),
+    credit_balance: z.number().int().nonnegative(),
+  }),
+);
 
 export async function getWorkspaceCreditBalance(
   input: unknown,
@@ -23,32 +29,28 @@ export async function getWorkspaceCreditBalance(
     return { error: "Please sign in again to view workspace credits." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("workspace_id", parsedWorkspaceId.data)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (membershipError) {
-    return { error: "Unable to verify workspace access. Please try again." };
-  }
-  if (!membership) {
-    return { error: "You don't have access to this workspace." };
-  }
-
-  const { data, error } = await supabase
-    .from("workspace_credit_balances")
-    .select("balance")
-    .eq("workspace_id", parsedWorkspaceId.data)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_workspace_pro_access", {
+    p_workspace_ids: [parsedWorkspaceId.data],
+  });
 
   if (error) {
     return {
       error:
-        "Unable to load workspace credits. Apply the workspace credits migration, then try again.",
+        "Unable to load workspace credits. Apply the workspace Pro access migration, then try again.",
     };
   }
 
-  return { data: { balance: data?.balance ?? 0 } };
+  const parsedCredits = workspaceCreditSchema.safeParse(data);
+  if (!parsedCredits.success) {
+    return { error: "Workspace credits returned an unexpected response." };
+  }
+
+  const workspaceCredit = parsedCredits.data.find(
+    (credit) => credit.workspace_id === parsedWorkspaceId.data,
+  );
+  if (!workspaceCredit) {
+    return { error: "You don't have access to this workspace." };
+  }
+
+  return { data: { balance: workspaceCredit.credit_balance } };
 }

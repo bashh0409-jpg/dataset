@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Mail, UsersRound, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { Check, Mail, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createWorkspaceInvite } from "@/app/actions/onboarding";
 import { getWorkspaceCreditBalance } from "@/app/actions/workspace-credits";
 import {
@@ -17,6 +17,11 @@ type WorkspaceAccessDialogProps = {
   creditPurchaseStatus: "success" | "return" | "processing" | null;
   onClose: () => void;
 };
+
+type WorkspaceCreditResult = Awaited<
+  ReturnType<typeof getWorkspaceCreditBalance>
+>;
+type WorkspaceMembersResult = Awaited<ReturnType<typeof getWorkspaceMembers>>;
 
 export default function WorkspaceAccessDialog({
   mode,
@@ -35,6 +40,12 @@ export default function WorkspaceAccessDialog({
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [creditError, setCreditError] = useState("");
   const [creditLoading, setCreditLoading] = useState(mode === "manage");
+  const initialLoadsRef = useRef(
+    new Map<
+      string,
+      Promise<[WorkspaceCreditResult, WorkspaceMembersResult]>
+    >(),
+  );
 
   const refreshCredits = async () => {
     setCreditLoading(true);
@@ -57,40 +68,52 @@ export default function WorkspaceAccessDialog({
     if (mode !== "manage") return;
 
     let cancelled = false;
-    void getWorkspaceCreditBalance(workspaceId)
-      .then((result) => {
-        if (cancelled) return;
-        if ("error" in result) {
-          setCreditError(result.error);
-          return;
-        }
-        setCreditBalance(result.data.balance);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCreditError("Unable to load workspace credits. Please try again.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setCreditLoading(false);
-      });
+    let request = initialLoadsRef.current.get(workspaceId);
+    if (!request) {
+      request = Promise.all([
+        getWorkspaceCreditBalance(workspaceId),
+        getWorkspaceMembers(workspaceId),
+      ]);
+      initialLoadsRef.current.set(workspaceId, request);
+      const requestToClear = request;
+      void request.then(
+        () => {
+          if (initialLoadsRef.current.get(workspaceId) === requestToClear) {
+            initialLoadsRef.current.delete(workspaceId);
+          }
+        },
+        () => {
+          if (initialLoadsRef.current.get(workspaceId) === requestToClear) {
+            initialLoadsRef.current.delete(workspaceId);
+          }
+        },
+      );
+    }
 
-    void getWorkspaceMembers(workspaceId)
-      .then((result) => {
+    void request
+      .then(([creditResult, membersResult]) => {
         if (cancelled) return;
-        if ("error" in result) {
-          setError(result.error);
-          return;
+        if ("error" in creditResult) {
+          setCreditError(creditResult.error);
+        } else {
+          setCreditBalance(creditResult.data.balance);
         }
-        setMembers(result.data);
+        if ("error" in membersResult) {
+          setError(membersResult.error);
+        } else {
+          setMembers(membersResult.data);
+        }
       })
       .catch(() => {
         if (!cancelled) {
-          setError("A network error occurred. Please try again.");
+          setCreditError("Unable to load workspace details. Please try again.");
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setCreditLoading(false);
+          setLoading(false);
+        }
       });
 
     return () => {

@@ -47,38 +47,37 @@ async function WorkspaceContent() {
 
   if (!memberships?.length) redirect("/onboarding");
 
-  const { data: workspaces, error: workspaceError } = await supabase
-    .from("workspaces")
-    .select("id, name")
-    .in(
-      "id",
-      memberships.map((membership) => membership.workspace_id),
-    );
+  const workspaceIds = memberships.map((membership) => membership.workspace_id);
+  const [
+    { data: workspaces, error: workspaceError },
+    { data: apiKeys, error: apiKeysError },
+    { data: subscriptionIsPro, error: subscriptionError },
+    { data: workspaceProAccess, error: workspaceProError },
+  ] = await Promise.all([
+    supabase.from("workspaces").select("id, name").in("id", workspaceIds),
+    supabase
+      .from("api_keys")
+      .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase.rpc("has_active_pro_subscription"),
+    supabase.rpc("get_workspace_pro_access", {
+      p_workspace_ids: workspaceIds,
+    }),
+  ]);
 
   if (workspaceError) {
     throw new Error("Unable to load your workspaces.");
   }
 
-  const { data: apiKeys, error: apiKeysError } = await supabase
-    .from("api_keys")
-    .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
   if (apiKeysError) {
     throw new Error("Unable to load your API keys.");
   }
 
-  const { data: subscriptionIsPro, error: subscriptionError } =
-    await supabase.rpc("has_active_pro_subscription");
   const billingStatusError = subscriptionError
     ? "Pro status is unavailable. Apply the Pro billing migration to your Supabase database, then refresh."
     : "";
   const isPro = subscriptionIsPro === true;
-  const { data: workspaceProAccess, error: workspaceProError } =
-    await supabase.rpc("get_workspace_pro_access", {
-      p_workspace_ids: memberships.map((membership) => membership.workspace_id),
-    });
 
   const parsedWorkspaceProAccess = z
     .array(
