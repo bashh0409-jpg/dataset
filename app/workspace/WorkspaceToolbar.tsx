@@ -16,6 +16,8 @@ import {
   ChevronRight,
   UsersRound,
   UserRoundPlus,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getWorkspaceProAiUsage } from "@/app/actions/pro-settings";
@@ -46,7 +48,7 @@ type WorkspaceToolbarProps = {
 };
 
 const buttonClass =
-  "flex w-fit items-center gap-2 rounded-full px-2 py-1.5 text-left text-[12px] font-medium tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-0 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
+  "flex w-fit items-center gap-2 rounded-lg px-2 py-1.5  text-left text-xs font-semibold tracking-tight text-[#686a64] transition hover:bg-[#f4f5f1] focus-visible:outline-0 focus-visible:outline-offset-2 focus-visible:outline-[#858780]";
 
 export default function WorkspaceToolbar({
   billingStatusError,
@@ -470,8 +472,8 @@ export default function WorkspaceToolbar({
           onClick={onManage}
           type="button"
         >
-          <UsersRound aria-hidden="true" className="size-[18px]" />
-          Workspace
+          <Users aria-hidden="true" className="size-[14px] stroke-[3px]" />
+          Manage
         </button>
         <button
           aria-label="Invite a teammate"
@@ -479,7 +481,7 @@ export default function WorkspaceToolbar({
           onClick={onInvite}
           type="button"
         >
-          <UserRoundPlus aria-hidden="true" className="size-[18px]" />
+          <UserPlus aria-hidden="true" className="size-[14px] stroke-[3px]" />
           Invite
         </button>
         {billingStatusError ? (
@@ -494,7 +496,7 @@ export default function WorkspaceToolbar({
         ) : isPersonalPro ? (
           <a
             aria-label="Pro subscription active. Manage your plan"
-            className="flex h-7 items-center gap-1 rounded-full border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+            className="flex h-7 items-center gap-1 rounded-lg border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
             href="/api/billing/portal"
             title="Pro plan active — manage subscription"
           >
@@ -503,7 +505,7 @@ export default function WorkspaceToolbar({
         ) : isPro ? (
           <span
             aria-label="This workspace has Pro access"
-            className="flex h-7 items-center rounded-full border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f]"
+            className="flex h-7 items-center rounded-lg border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f]"
             title="Pro models are included through this workspace"
           >
             Workspace Pro
@@ -511,7 +513,7 @@ export default function WorkspaceToolbar({
         ) : workspaceCreditBalance > 0 ? (
           <button
             aria-label={`${workspaceCreditBalance} workspace credits available. Manage credits`}
-            className="flex h-7 items-center rounded-full gap-0.5 border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+            className="flex py-1 items-center rounded-lg gap-0.5 border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
             onClick={onManage}
             title="Premium models use one workspace credit per request"
             type="button"
