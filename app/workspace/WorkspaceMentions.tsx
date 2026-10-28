@@ -1,7 +1,14 @@
 "use client";
 
-import { AtSign, Check, LoaderCircle } from "lucide-react";
+import {
+  AtSign,
+  Check,
+  LoaderCircle,
+  MailOpen,
+  MoreVertical,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   createWorkspaceMention,
   getWorkspaceMentions,
@@ -36,14 +43,18 @@ export default function WorkspaceMentions({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [markingRead, setMarkingRead] = useState(false);
   const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
-  const openRef = useRef(open);
+  const mentionsPanelRef = useRef<HTMLElement>(null);
+  const actionsButtonRef = useRef<HTMLButtonElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
-
-  useEffect(() => {
-    openRef.current = open;
-  }, [open]);
+  const [actionsMenuPosition, setActionsMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const refreshMentions = useCallback(async () => {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
@@ -55,35 +66,8 @@ export default function WorkspaceMentions({
           setError(result.error);
           return;
         }
-        const unreadMentionIds = openRef.current
-          ? result.data.mentions
-              .filter((mention) => mention.isMentioned && !mention.readAt)
-              .map((mention) => mention.id)
-          : [];
-        if (unreadMentionIds.length > 0) {
-          const marked = await markWorkspaceMentionsRead({
-            workspaceId,
-            mentionIds: unreadMentionIds,
-          });
-          if ("error" in marked) {
-            setError(marked.error);
-            setMentions(result.data.mentions);
-            setUnreadCount(result.data.unreadCount);
-            return;
-          }
-        }
-
-        const readAt = new Date().toISOString();
-        setMentions(
-          result.data.mentions.map((mention) =>
-            unreadMentionIds.includes(mention.id)
-              ? { ...mention, readAt }
-              : mention,
-          ),
-        );
-        setUnreadCount(
-          Math.max(0, result.data.unreadCount - unreadMentionIds.length),
-        );
+        setMentions(result.data.mentions);
+        setUnreadCount(result.data.unreadCount);
         setError("");
       } catch {
         setError("Unable to load workspace mentions. Please try again.");
@@ -100,9 +84,60 @@ export default function WorkspaceMentions({
     }
   }, [workspaceId]);
 
+  const markAllAsRead = async () => {
+    const unreadMentionIds = mentions
+      .filter((mention) => mention.isMentioned && !mention.readAt)
+      .map((mention) => mention.id);
+    setActionsOpen(false);
+    if (unreadMentionIds.length === 0) return;
+
+    setMarkingRead(true);
+    setError("");
+    try {
+      const result = await markWorkspaceMentionsRead({
+        workspaceId,
+        mentionIds: unreadMentionIds,
+      });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+
+      const readAt = new Date().toISOString();
+      setMentions((current) =>
+        current.map((mention) =>
+          unreadMentionIds.includes(mention.id)
+            ? { ...mention, readAt }
+            : mention,
+        ),
+      );
+      setUnreadCount(0);
+    } catch {
+      setError("Unable to mark mentions as read. Please try again.");
+    } finally {
+      setMarkingRead(false);
+    }
+  };
+
+  const toggleActionsMenu = () => {
+    if (actionsOpen) {
+      setActionsOpen(false);
+      return;
+    }
+
+    const panelBounds = mentionsPanelRef.current?.getBoundingClientRect();
+    if (panelBounds) {
+      setActionsMenuPosition({
+        top: panelBounds.top,
+        left: panelBounds.right + 6,
+      });
+    }
+    setActionsOpen(true);
+  };
+
   const openMentions = async () => {
-    openRef.current = true;
     setOpen(true);
+    setActionsOpen(false);
     setComposerOpen(false);
     setError("");
     setLoading(true);
@@ -136,12 +171,20 @@ export default function WorkspaceMentions({
   useEffect(() => {
     if (!open) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !containerRef.current?.contains(target) &&
+        !actionsMenuRef.current?.contains(target)
+      ) {
         setOpen(false);
+        setActionsOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        setActionsOpen(false);
+      }
     };
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
@@ -222,7 +265,10 @@ export default function WorkspaceMentions({
         className="workspace-toolbar-button relative cursor-pointer"
         title="Workspace mentions"
         onClick={() => {
-          if (open) setOpen(false);
+          if (open) {
+            setOpen(false);
+            setActionsOpen(false);
+          }
           else void openMentions();
         }}
         type="button"
@@ -237,6 +283,7 @@ export default function WorkspaceMentions({
 
       {open && (
         <section
+          ref={mentionsPanelRef}
           aria-label="Workspace mentions"
           aria-modal="false"
           className="absolute left-0 top-[calc(100%+6px)] z-[70] flex max-h-[min(78vh,620px)] w-[min(300px,calc(100vw-84px))] flex-col overflow-hidden rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
@@ -253,17 +300,36 @@ export default function WorkspaceMentions({
               </span>
               <button
                 aria-label="Write a mention"
-                className="flex size-7 items-center justify-center rounded-md text-[#686a64] transition hover:bg-[#eff0ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                className="flex size-6 items-center justify-center rounded-md text-[#686a64] transition hover:bg-[#eff0ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
                 onClick={() => void openComposer()}
                 title="Write a mention"
                 type="button"
               >
                 <AtSign aria-hidden="true" className="size-4" />
               </button>
+              <div className="relative">
+                <button
+                  aria-expanded={actionsOpen}
+                  aria-haspopup="menu"
+                  aria-label="Mention actions"
+                  className="flex size-6 items-center justify-center rounded-md text-[#686a64] transition hover:bg-[#eff0ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                  onClick={toggleActionsMenu}
+                  title="Mention actions"
+                  type="button"
+                  ref={actionsButtonRef}
+                >
+                  <MoreVertical aria-hidden="true" className="size-4" />
+                </button>
+              </div>
             </div>
           </header>
 
           <div className="min-h-0 flex-1 tracking-tight font-semibold overflow-y-auto px-3 py-2">
+            {error && (
+              <p className="mb-2 rounded bg-[#fff4f2] px-2 py-1.5 text-[11px] text-[#b42318]" role="alert">
+                {error}
+              </p>
+            )}
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-6 text-xs text-[#686a64]">
                 <LoaderCircle
@@ -272,13 +338,6 @@ export default function WorkspaceMentions({
                 />
                 Loading mentions…
               </div>
-            ) : error && mentions.length === 0 ? (
-              <p
-                className="py-5 text-center text-xs text-[#b42318]"
-                role="alert"
-              >
-                {error}
-              </p>
             ) : mentions.length === 0 ? (
               <div className="flex gap-2.5 py-2">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#eff0ec] text-[#686a64]">
@@ -412,7 +471,7 @@ export default function WorkspaceMentions({
                       className="size-3 animate-spin"
                     />
                   ) : (
-                    <AtSign aria-hidden="true" className="size-3" /> 
+                    <AtSign aria-hidden="true" className="size-3" />
                   )}
                   Mention
                 </button>
@@ -421,6 +480,37 @@ export default function WorkspaceMentions({
           ) : null}
         </section>
       )}
+      {open &&
+        actionsOpen &&
+        actionsMenuPosition &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={actionsMenuRef}
+            className="z-[100] w-max rounded-md border border-[#dfe2dc] bg-white shadow-[0_6px_18px_rgba(20,24,18,0.14)]"
+            role="menu"
+            style={{
+              position: "fixed",
+              top: actionsMenuPosition.top,
+              left: Math.min(
+                actionsMenuPosition.left,
+                window.innerWidth - 180,
+              ),
+            }}
+          >
+            <button
+              className="flex w-fit items-center gap-2 rounded px-2 py-1 text-left text-sm font-medium text-[#555850] transition hover:bg-[#f4f5f1] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={markingRead || unreadCount === 0}
+              onClick={() => void markAllAsRead()}
+              role="menuitem"
+              type="button"
+            >
+              <MailOpen aria-hidden="true" className="size-3.5 shrink-0" />
+              {markingRead ? "Marking as read…" : "Mark all as read"}
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
