@@ -522,7 +522,7 @@ export default function WorkspaceMentions({
             }}
           >
             <button
-              className="flex w-fit items-center gap-2 rounded px-2 py-1 text-left text-sm font-medium text-[#555850] transition hover:bg-[#f4f5f1] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-fit items-center gap-2 rounded px-2 py-1 text-left tracking-tight text-xs font-medium text-[#555850] transition hover:bg-[#f4f5f1] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={markingRead || unreadCount === 0}
               onClick={() => void markAllAsRead()}
               role="menuitem"
