@@ -286,13 +286,16 @@ export default function WorkspaceShell({
   const conversationStorageKey = `synthetic.activeConversationId.${activeWorkspace?.id ?? ""}`;
   const activeConversation =
     savedConversations.find((chat) => chat.id === activeConversationId) ?? null;
-  const filteredNavigation = useMemo(
-    () =>
-      navigation.filter((item) =>
-        item.label.toLowerCase().includes(search.trim().toLowerCase()),
-      ),
-    [search],
-  );
+  const matchingConversations = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return savedConversations;
+
+    return savedConversations.filter(
+      (conversation) =>
+        conversation.title.toLowerCase().includes(query) ||
+        conversation.label?.toLowerCase().includes(query),
+    );
+  }, [savedConversations, search]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) return;
@@ -800,7 +803,7 @@ export default function WorkspaceShell({
             <button
               aria-label="Go back"
               className="workspace-toolbar-button cursor-pointer"
-              onClick={() => window.history.back()}
+              onClick={() => router.back()}
               title="Go back"
               type="button"
             >
@@ -809,7 +812,7 @@ export default function WorkspaceShell({
             <button
               aria-label="Go forward"
               className="workspace-toolbar-button cursor-pointer"
-              onClick={() => window.history.forward()}
+              onClick={() => router.forward()}
               title="Go forward"
               type="button"
             >
@@ -821,18 +824,105 @@ export default function WorkspaceShell({
                 workspaceId={activeWorkspace.id}
               />
             )}
-            <button
-              aria-label={searchOpen ? "Close search" : "Search workspace"}
-              className="workspace-toolbar-button cursor-pointer"
-              onClick={() => {
-                setSearchOpen((open) => !open);
-                setSearch("");
-              }}
-              title="Search workspace"
-              type="button"
-            >
-              {searchOpen ? <X /> : <Search />}
-            </button>
+            <div className="relative">
+              <button
+                aria-label={searchOpen ? "Close search" : "Search workspace"}
+                aria-expanded={searchOpen}
+                className="workspace-toolbar-button cursor-pointer"
+                onClick={() => {
+                  setSearchOpen((open) => !open);
+                  setSearch("");
+                }}
+                title="Search workspace"
+                type="button"
+              >
+                {searchOpen ? <X /> : <Search />}
+              </button>
+              {searchOpen && (
+                <section
+                  aria-label="Conversation search results"
+                  className="absolute left-0 top-[calc(100%+6px)] z-[70] max-h-[min(78vh,620px)] w-[min(300px,calc(100vw-84px))] overflow-y-auto rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
+                  role="region"
+                >
+                  <header className="flex items-center justify-between border-b border-[#e7e8e4] px-2.5 py-1.5">
+                    <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
+                      Conversations
+                    </h2>
+                    <span className="text-[11px] capitalize font-semibold tracking-tight text-[#868880]"></span>
+                    <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
+                      {matchingConversations.length}{" "}
+                      {matchingConversations.length === 1
+                        ? "result"
+                        : "results"}
+                    </h2>
+                  </header>
+                  <label className="flex h-8 items-center gap-2 border-b border-[#e7e8e4] bg-white px-2.5">
+                    <Search
+                      aria-hidden="true"
+                      className="size-[13px] shrink-0 text-[#888a84]"
+                    />
+                    <input
+                      autoFocus
+                      aria-label="Search conversations"
+                      className="min-w-0 flex-1 font-medium tracking-tight bg-transparent text-[12px] outline-none placeholder:text-[#a0a19c]"
+                      onChange={(event) => setSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setSearch("");
+                          setSearchOpen(false);
+                        }
+                      }}
+                      placeholder="Search conversations"
+                      value={search}
+                    />
+                    <span className="shrink-0 hidden text-[10px] font-medium text-[#868880]">
+                      {matchingConversations.length}
+                    </span>
+                  </label>
+
+                  {matchingConversations.length > 0 ? (
+                    <ul className="space-y-0.5 p-1">
+                      {matchingConversations.map((conversation) => (
+                        <li key={conversation.id}>
+                          <button
+                            className="flex w-full items-center font-semibold tracking-tight text-[12px] gap-2 rounded-md px-2 py-2 text-left transition hover:bg-[#f0f3eb] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#858780]"
+                            onClick={() => {
+                              openSavedChat(conversation.id);
+                              setSearch("");
+                              setSearchOpen(false);
+                            }}
+                            type="button"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`size-2 shrink-0 rounded-full ${
+                                conversation.color
+                                  ? conversationColorClasses[conversation.color]
+                                  : "bg-[#c9cbc5]"
+                              }`}
+                            />
+                            <span className="min-w-0 flex-1 text-[10px] truncate text-[11px] font-semibold text-[#4c4e48]">
+                              {conversation.title}
+                            </span>
+                            {conversation.archived && (
+                              <span className="shrink-0 rounded bg-[#eff0ec] px-1.5 py-0.5 text-[9px] text-[#777a72]">
+                                Archived
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="px-3 py-5 font-semibold tracking-tight text-center text-[11px] text-[#868880]">
+                      {search.trim()
+                        ? `No conversations match “${search.trim()}”.`
+                        : "No saved conversations yet."}
+                    </p>
+                  )}
+                </section>
+              )}
+            </div>
             <button
               aria-label="Start a new chat"
               className="workspace-compose-button cursor-pointer"
@@ -873,24 +963,8 @@ export default function WorkspaceShell({
             )}
           </div>
 
-          {searchOpen && (
-            <label className="mb-2 flex h-8 items-center gap-2 rounded border border-[#e8e9e5] bg-white px-2">
-              <Search
-                aria-hidden="true"
-                className="size-[13px] text-[#888a84]"
-              />
-              <input
-                autoFocus
-                className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-[#a0a19c]"
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Find a section"
-                value={search}
-              />
-            </label>
-          )}
-
           <nav aria-label="Workspace sections" className="space-y-[2px]">
-            {filteredNavigation.map(({ id, label, icon, comingSoon }) => (
+            {navigation.map(({ id, label, icon, comingSoon }) => (
               <button
                 aria-current={activeView === id ? "page" : undefined}
                 aria-disabled={comingSoon || undefined}
@@ -919,11 +993,6 @@ export default function WorkspaceShell({
                 )}
               </button>
             ))}
-            {searchOpen && filteredNavigation.length === 0 && (
-              <p className="px-1 py-2 text-[11px] text-[#90918b]">
-                No matching sections
-              </p>
-            )}
           </nav>
 
           <section aria-label="Saved chats" className="mt-5">
