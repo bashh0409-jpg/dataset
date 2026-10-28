@@ -56,6 +56,7 @@ type Workspace = {
   id: string;
   name: string;
   role: "owner" | "member";
+  hasProAccess: boolean;
 };
 
 type AiModel = "qwen" | "auto" | "claude" | "openai";
@@ -1046,7 +1047,9 @@ export default function WorkspaceShell({
         <WorkspaceToolbar
           activeConversation={activeConversation}
           billingStatusError={billingStatusError}
-          isPro={isPro}
+          isPro={activeWorkspace?.hasProAccess ?? isPro}
+          isPersonalPro={isPro}
+          workspaceId={activeWorkspace?.id ?? ""}
           model={aiModel}
           onArchiveConversation={() =>
             activeConversation
@@ -1108,7 +1111,7 @@ export default function WorkspaceShell({
             <GeneratorPanel
               key={newConversationToken}
               workspaceId={activeWorkspace?.id ?? ""}
-              isPro={isPro}
+              isPro={activeWorkspace?.hasProAccess ?? isPro}
               model={aiModel}
               onChatSaved={handleChatSaved}
               onConversationOpened={setActiveConversationId}

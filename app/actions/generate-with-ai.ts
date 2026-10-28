@@ -40,20 +40,12 @@ type GenerateWithAiResult =
   | {
       question: string;
       modelNotice?: string;
-      proAiUsage?: {
-        used: number;
-        limit: 50;
-      };
     }
   | {
       data: {
         tables: GeneratedTable[];
       };
       modelNotice?: string;
-      proAiUsage?: {
-        used: number;
-        limit: 50;
-      };
     }
   | { error: string };
 
@@ -232,7 +224,6 @@ export async function generateWithAi(
       : null;
   let model: "qwen" | "claude" | "openai" =
     requestedModel === "auto" ? "claude" : requestedModel;
-  let proAiUsage: { used: number; limit: 50 } | undefined;
   let apiKey: string | null = null;
   let availableModels: ("claude" | "openai")[] = [];
   let byokCredentials: {
@@ -268,21 +259,26 @@ export async function generateWithAi(
   };
 
   if (requestedModel !== "qwen") {
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from("plan_subscriptions")
-      .select("status, current_period_start, current_period_end")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: workspaceAccess, error: workspaceAccessError } =
+      await supabase.rpc("get_workspace_pro_access", {
+        p_workspace_ids: [workspaceId],
+      });
 
-    if (subscriptionError) {
+    if (workspaceAccessError) {
       return { error: "Unable to verify your Pro plan. Please try again." };
     }
+    const parsedWorkspaceAccess = z
+      .array(z.object({ workspace_id: z.uuid(), has_pro: z.boolean() }))
+      .safeParse(workspaceAccess);
     if (
-      !subscription ||
-      !["active", "trialing"].includes(subscription.status) ||
-      Date.parse(subscription.current_period_end) <= Date.now()
+      !parsedWorkspaceAccess.success ||
+      !parsedWorkspaceAccess.data.some(
+        (access) => access.workspace_id === workspaceId && access.has_pro,
+      )
     ) {
-      return { error: "Claude and OpenAI models require an active Pro plan." };
+      return {
+        error: "Claude and OpenAI models require an active Pro workspace.",
+      };
     }
 
     try {
@@ -347,78 +343,26 @@ export async function generateWithAi(
     }
 
     const { data: reservation, error: reservationError } = await supabase.rpc(
-      "reserve_pro_ai_premium_request",
-      { p_included: funding === "included" },
+      "reserve_workspace_pro_ai_request",
+      { p_workspace_id: workspaceId },
     );
     if (reservationError) {
       return {
-        error: "Unable to verify your Pro AI usage limit. Please try again.",
+        error: "Unable to verify your workspace Pro allowance. Please try again.",
       };
     }
     if (reservation === "rate_limited") {
       useFreeModelFallback = true;
       modelNotice =
-        "You've reached the Pro model limit of 20 requests per 3 hours, so this request used the Free model instead.";
-    } else if (reservation === "monthly_limit") {
-      if (funding === "included") {
-        const { data: creditData, error: creditError } = await supabase.rpc(
-          "reserve_workspace_credit",
-          { p_workspace_id: workspaceId },
-        );
-        const parsedCredit = z
-          .discriminatedUnion("status", [
-            z.object({
-              status: z.literal("allowed"),
-              balance: z.number().int().nonnegative(),
-            }),
-            z.object({
-              status: z.enum([
-                "insufficient",
-                "not_authenticated",
-                "not_a_member",
-              ]),
-              balance: z.number().int().nonnegative().optional(),
-            }),
-          ])
-          .safeParse(creditData);
-
-        if (creditError || !parsedCredit.success) {
-          return {
-            error: "Unable to verify workspace credits. Please try again.",
-          };
-        }
-        if (parsedCredit.data.status === "not_authenticated") {
-          return { error: "Please sign in again to use workspace credits." };
-        }
-        if (parsedCredit.data.status === "not_a_member") {
-          return { error: "You don't have access to this workspace's credits." };
-        }
-        if (parsedCredit.data.status === "allowed") {
-          modelNotice = `Your included Pro allowance is used up; 1 workspace credit was used. ${parsedCredit.data.balance} credits remain.`;
-        } else {
-          useFreeModelFallback = true;
-          modelNotice =
-            "Your included Pro model allowance and the workspace credit balance are used up, so this request used the Free model instead.";
-        }
-      } else {
-        useFreeModelFallback = true;
-        modelNotice =
-          "Your included Pro model allowance is used up, so this request used the Free model instead.";
-      }
+        "You've used all 50 premium requests for this allowance period. Premium access will refresh in 4 hours; this request used the Standard model instead.";
+    } else if (reservation === "not_authenticated") {
+      return { error: "Please sign in again to use Pro models." };
+    } else if (reservation === "not_pro") {
+      return {
+        error: "This workspace no longer has active Pro access.",
+      };
     } else if (reservation !== "allowed") {
       return { error: "Unable to reserve Pro AI usage. Please try again." };
-    } else if (funding === "included") {
-      const { count, error: usageError } = await supabase
-        .from("usage_events")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("event_type", "pro_ai_request")
-        .gte("created_at", subscription.current_period_start)
-        .lt("created_at", subscription.current_period_end);
-      if (usageError) {
-        return { error: "Unable to load Pro AI usage. Please try again." };
-      }
-      proAiUsage = { used: count ?? 1, limit: 50 };
     }
 
     if (!useFreeModelFallback) {
@@ -432,6 +376,7 @@ export async function generateWithAi(
         "reserve_pro_ai_provider_slot_for_user",
         {
           p_user_id: user.id,
+          p_workspace_id: workspaceId,
           p_requested_provider: requestedProvider,
           p_available_providers: availableModels,
         },
@@ -627,8 +572,7 @@ export async function generateWithAi(
     if (result.status === "clarification") {
       return {
         question: result.question,
-          ...(modelNotice ? { modelNotice } : {}),
-          ...(proAiUsage ? { proAiUsage } : {}),
+        ...(modelNotice ? { modelNotice } : {}),
       };
     }
     const tables = generateRelationalTables(result.request);
@@ -637,7 +581,6 @@ export async function generateWithAi(
         tables,
       },
       ...(modelNotice ? { modelNotice } : {}),
-      ...(proAiUsage ? { proAiUsage } : {}),
     };
   } catch {
     return {

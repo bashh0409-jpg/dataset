@@ -19,12 +19,14 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getProAiSettings } from "@/app/actions/pro-settings";
+import { getWorkspaceProAiUsage } from "@/app/actions/pro-settings";
 import type { AiConversationSummary } from "@/app/actions/ai-conversations";
 
 type WorkspaceToolbarProps = {
   billingStatusError: string;
   isPro: boolean;
+  isPersonalPro: boolean;
+  workspaceId: string;
   model: "qwen" | "auto" | "claude" | "openai";
   workspaceName: string;
   activeConversation: AiConversationSummary | null;
@@ -49,6 +51,8 @@ const buttonClass =
 export default function WorkspaceToolbar({
   billingStatusError,
   isPro,
+  isPersonalPro,
+  workspaceId,
   model,
   workspaceName,
   activeConversation,
@@ -96,8 +100,9 @@ export default function WorkspaceToolbar({
 
   useEffect(() => {
     if (!menuOpen) return;
+    if (!isPro) return;
     let active = true;
-    void getProAiSettings()
+    void getWorkspaceProAiUsage(workspaceId)
       .then((result) => {
         if (!active) return;
         if ("error" in result) {
@@ -106,11 +111,12 @@ export default function WorkspaceToolbar({
           return;
         }
         setCreditsError("");
-        setCredits(
-          result.data.isPro
-            ? `${Math.max(0, result.data.monthlyRequestLimit - result.data.includedRequestsUsed)} of ${result.data.monthlyRequestLimit} requests remaining`
-            : "Free plan · up to 50 requests per 24 hours",
-        );
+        const remaining = Math.max(0, 50 - result.data.used);
+        const resetsAt = result.data.nextAvailableAt;
+        const resetMessage = resetsAt
+          ? ` · 50 available in ${Math.max(1, Math.ceil((Date.parse(resetsAt) - Date.now()) / 60_000))} min`
+          : "";
+        setCredits(`${remaining} of 50 premium requests${resetMessage}`);
       })
       .catch(() => {
         if (!active) return;
@@ -120,7 +126,7 @@ export default function WorkspaceToolbar({
     return () => {
       active = false;
     };
-  }, [menuOpen]);
+  }, [isPro, menuOpen, workspaceId]);
 
   const runAction = async (name: string, action: () => Promise<void>) => {
     setBusyAction(name);
@@ -245,9 +251,9 @@ export default function WorkspaceToolbar({
               </svg>
 
               <p className="text-xs font-medium tracking-tight leading-4  text-[#555850]">
-                {credits}
+                {isPro ? credits : "Free plan · standard models"}
               </p>
-              {creditsError && (
+              {isPro && creditsError && (
                 <p className="text-[10px] text-[#a64239]" role="status">
                   {creditsError}
                 </p>
@@ -487,7 +493,7 @@ export default function WorkspaceToolbar({
           >
             Plan status unavailable
           </span>
-        ) : isPro ? (
+        ) : isPersonalPro ? (
           <a
             aria-label="Pro subscription active. Manage your plan"
             className="flex h-7 items-center gap-1 rounded-full border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
@@ -496,6 +502,14 @@ export default function WorkspaceToolbar({
           >
             Pro
           </a>
+        ) : isPro ? (
+          <span
+            aria-label="This workspace has Pro access"
+            className="flex h-7 items-center rounded-full border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f]"
+            title="Pro models are included through this workspace"
+          >
+            Workspace Pro
+          </span>
         ) : (
           <form action="/api/billing/checkout" method="post">
             <button

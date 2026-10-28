@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiKeySummary } from "./DeveloperPanel";
 import WorkspaceShell from "./WorkspaceShell";
@@ -64,6 +65,17 @@ async function WorkspaceContent() {
     ? "Pro status is unavailable. Apply the Pro billing migration to your Supabase database, then refresh."
     : "";
   const isPro = subscriptionIsPro === true;
+  const { data: workspaceProAccess, error: workspaceProError } =
+    await supabase.rpc("get_workspace_pro_access", {
+      p_workspace_ids: memberships.map((membership) => membership.workspace_id),
+    });
+
+  const parsedWorkspaceProAccess = z
+    .array(z.object({ workspace_id: z.uuid(), has_pro: z.boolean() }))
+    .safeParse(workspaceProAccess);
+  if (workspaceProError || !parsedWorkspaceProAccess.success) {
+    throw new Error("Unable to load workspace Pro access.");
+  }
 
   const displayName =
     typeof user.user_metadata.full_name === "string"
@@ -112,6 +124,10 @@ async function WorkspaceContent() {
           memberships.find(
             (membership) => membership.workspace_id === workspace.id,
           )?.role ?? "member",
+        hasProAccess:
+          parsedWorkspaceProAccess.data.find(
+            (access) => access.workspace_id === workspace.id,
+          )?.has_pro ?? false,
       }))}
     />
   );

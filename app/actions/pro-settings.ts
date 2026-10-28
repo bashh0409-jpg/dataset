@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const providerSchema = z.enum(["anthropic", "openai"]);
 const apiKeyInputSchema = z.string().trim().min(20).max(500);
+const workspaceIdSchema = z.uuid();
 
 type ProSettingsResult =
   | {
@@ -84,6 +85,54 @@ export async function getProAiSettings(): Promise<ProSettingsResult> {
       savedProviders: credentials.map((credential) =>
         providerSchema.parse(credential.provider),
       ),
+    },
+  };
+}
+
+export async function getWorkspaceProAiUsage(
+  workspaceIdInput: unknown,
+): Promise<
+  | { data: { used: number; nextAvailableAt: string | null } }
+  | { error: string }
+> {
+  const workspaceId = workspaceIdSchema.safeParse(workspaceIdInput);
+  if (!workspaceId.success) {
+    return { error: "Select a valid workspace to view Pro AI usage." };
+  }
+
+  const auth = await getCurrentUser();
+  if (!auth) return { error: "Please sign in again to view Pro AI usage." };
+
+  const { data, error } = await auth.supabase.rpc(
+    "get_workspace_pro_ai_usage",
+    { p_workspace_id: workspaceId.data },
+  );
+  if (error) {
+    return { error: "Unable to load workspace Pro AI usage. Please try again." };
+  }
+
+  const usage = z
+    .array(
+      z.object({
+        used: z.number().int().min(0).max(50),
+        next_available_at: z.string().nullable(),
+      }),
+    )
+    .length(1)
+    .safeParse(data);
+  if (!usage.success) {
+    return { error: "Workspace Pro AI usage returned an invalid response." };
+  }
+
+  const nextAvailableAt = usage.data[0].next_available_at;
+  if (nextAvailableAt && !Number.isFinite(Date.parse(nextAvailableAt))) {
+    return { error: "Workspace Pro AI usage returned an invalid reset time." };
+  }
+
+  return {
+    data: {
+      used: usage.data[0].used,
+      nextAvailableAt,
     },
   };
 }
