@@ -182,7 +182,7 @@ export default function WorkspaceAccessDialog({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {isOwner && (
+            {mode === "manage" && isOwner && (
               <form
                 action="/api/billing/workspace-credits/checkout"
                 method="post"
@@ -220,20 +220,15 @@ export default function WorkspaceAccessDialog({
             </p>
             {sentTo && (
               <div
-                className="mt-4 flex items-start gap-2 rounded-lg border border-[#d1fadf] bg-[#f6fef9] p-3"
+                className="mt-4 flex items-start gap-2 rounded-lg border border-[#d1fadf] bg-[#f6fef9] p-1 px-2"
                 role="status"
               >
-                <Check
-                  aria-hidden="true"
-                  className="mt-0.5 size-4 shrink-0 text-[#039855]"
-                />
+                
                 <div>
-                  <p className="text-[13px] font-medium text-[#027a48]">
-                    Invitation email sent
-                  </p>
-                  <p className="mt-1 text-[12px] text-[#475467]">
+                  <p className="text-[13px] tracking-tight font-semibold text-[#027a48]">
                     We sent the invite to {sentTo}.
                   </p>
+                  
                 </div>
               </div>
             )}

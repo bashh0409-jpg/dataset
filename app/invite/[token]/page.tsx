@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import Link from "next/link";
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import InviteAcceptance from "@/app/components/InviteAcceptance";
 import InviteSignIn from "@/app/components/InviteSignIn";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -37,15 +37,18 @@ async function InviteContent({
 
   if (!user) return <InviteSignIn token={token} />;
 
-  const { data, error } = await supabase.rpc("accept_workspace_invite", {
-    p_token_hash: createHash("sha256").update(token).digest("hex"),
-  });
+  const { data, error } = await supabase.rpc(
+    "get_workspace_invite_workspace_name",
+    {
+      p_token_hash: createHash("sha256").update(token).digest("hex"),
+    },
+  );
 
   if (error || typeof data !== "string") {
     return <InviteError />;
   }
 
-  redirect("/workspace");
+  return <InviteAcceptance token={token} workspaceName={data} />;
 }
 
 function InviteLoading() {
@@ -71,7 +74,8 @@ function InviteError() {
 
         <p className="geist text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
           This invite may have expired, already been used, or was created for a
-          different email address.
+          different email address. Make sure you&apos;re signed in with the
+          address that received it.
         </p>
 
         <Link
