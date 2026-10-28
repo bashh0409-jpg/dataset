@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Legal | Sythentic",
-  description: "Privacy, cookies, and terms for the Sythentic website.",
+  title: "Terms and legal",
+  description: "Terms and legal notices for the Synthetic website.",
 };
 
 const sections = [
@@ -25,8 +25,8 @@ export default function LegalPage() {
           </h1>
           <p className="mt-3 text-sm leading-4 tracking-tight ">
             <span className="text-[#999]  text-sm mb-2 font-medium tracking-tight ">
-              These terms and notices apply to the Sythentic website and related
-              product experience. Sythentic may evolve over time and is provided
+              These terms and notices apply to the Synthetic website and related
+              product experience. Synthetic may evolve over time and is provided
               as a developer tool for synthetic data generation.
             </span>
           </p>

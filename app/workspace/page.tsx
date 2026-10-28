@@ -1,12 +1,22 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import type { Metadata } from "next";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiKeySummary } from "./DeveloperPanel";
 import WorkspaceShell from "./WorkspaceShell";
 
 export const maxDuration = 60;
+
+export const metadata: Metadata = {
+  title: "Workspace",
+  description: "Generate and manage synthetic data in your workspace.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function WorkspacePage() {
   return (

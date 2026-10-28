@@ -14,7 +14,6 @@ import {
   Trash2,
   Zap,
   ChevronRight,
-  Share2,
   UsersRound,
   UserRoundPlus,
 } from "lucide-react";
@@ -483,15 +482,6 @@ export default function WorkspaceToolbar({
           <UserRoundPlus aria-hidden="true" className="size-[18px]" />
           Invite
         </button>
-        <button
-          aria-label="Share workspace"
-          className={buttonClass}
-          type="button"
-        >
-          <Share2 aria-hidden="true" className="size-[18px]" />
-          Share
-        </button>
-
         {billingStatusError ? (
           <span
             aria-label={billingStatusError}

@@ -5,7 +5,6 @@ import {
   Archive,
   ArrowLeft,
   ArrowRight,
-  AtSign,
   Check,
   ChevronDown,
   Ellipsis,
@@ -34,6 +33,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import DeveloperPanel, { type ApiKeySummary } from "./DeveloperPanel";
 import GeneratorPanel from "./GeneratorPanel";
+import WorkspaceMentions from "./WorkspaceMentions";
 import WorkspaceAccessDialog from "./WorkspaceAccessDialog";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 
@@ -787,15 +787,12 @@ export default function WorkspaceShell({
             >
               <ArrowRight />
             </button>
-            <button
-              aria-label="Activity (coming soon)"
-              className="workspace-toolbar-button cursor-not-allowed opacity-50 max-[640px]:hidden"
-              disabled
-              title="Activity — coming soon"
-              type="button"
-            >
-              <AtSign />
-            </button>
+            {activeWorkspace && (
+              <WorkspaceMentions
+                key={activeWorkspace.id}
+                workspaceId={activeWorkspace.id}
+              />
+            )}
             <button
               aria-label={searchOpen ? "Close search" : "Search workspace"}
               className="workspace-toolbar-button cursor-pointer"
