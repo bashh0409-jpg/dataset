@@ -96,10 +96,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <Navbar />
         </Suspense>
-        <Suspense fallback={null}>
-          <Analytics />
-          <SpeedInsights />
-        </Suspense>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
