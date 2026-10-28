@@ -71,7 +71,13 @@ async function WorkspaceContent() {
     });
 
   const parsedWorkspaceProAccess = z
-    .array(z.object({ workspace_id: z.uuid(), has_pro: z.boolean() }))
+    .array(
+      z.object({
+        workspace_id: z.uuid(),
+        has_pro: z.boolean(),
+        credit_balance: z.number().int().nonnegative(),
+      }),
+    )
     .safeParse(workspaceProAccess);
   if (workspaceProError || !parsedWorkspaceProAccess.success) {
     throw new Error("Unable to load workspace Pro access.");
@@ -128,6 +134,10 @@ async function WorkspaceContent() {
           parsedWorkspaceProAccess.data.find(
             (access) => access.workspace_id === workspace.id,
           )?.has_pro ?? false,
+        creditBalance:
+          parsedWorkspaceProAccess.data.find(
+            (access) => access.workspace_id === workspace.id,
+          )?.credit_balance ?? 0,
       }))}
     />
   );

@@ -268,13 +268,22 @@ export async function generateWithAi(
       return { error: "Unable to verify your Pro plan. Please try again." };
     }
     const parsedWorkspaceAccess = z
-      .array(z.object({ workspace_id: z.uuid(), has_pro: z.boolean() }))
+      .array(
+        z.object({
+          workspace_id: z.uuid(),
+          has_pro: z.boolean(),
+          credit_balance: z.number().int().nonnegative(),
+        }),
+      )
       .safeParse(workspaceAccess);
     if (
       !parsedWorkspaceAccess.success ||
-      !parsedWorkspaceAccess.data.some(
-        (access) => access.workspace_id === workspaceId && access.has_pro,
-      )
+      !parsedWorkspaceAccess.data.some((access) => {
+        return (
+          access.workspace_id === workspaceId &&
+          (access.has_pro || access.credit_balance > 0)
+        );
+      })
     ) {
       return {
         error: "Claude and OpenAI models require an active Pro workspace.",
@@ -359,8 +368,13 @@ export async function generateWithAi(
       return { error: "Please sign in again to use Pro models." };
     } else if (reservation === "not_pro") {
       return {
-        error: "This workspace no longer has active Pro access.",
+        error:
+          "This workspace needs an active Pro subscription or available workspace credits to use premium models.",
       };
+    } else if (reservation === "credits_exhausted") {
+      useFreeModelFallback = true;
+      modelNotice =
+        "Workspace credits ran out, so this request used the Standard model instead.";
     } else if (reservation !== "allowed") {
       return { error: "Unable to reserve Pro AI usage. Please try again." };
     }
@@ -455,6 +469,16 @@ export async function generateWithAi(
     if (freeReservation !== "allowed") {
       return {
         error: "Unable to reserve Free model usage. Please try again.",
+      };
+    }
+
+    const { error: workspaceCreditError } = await supabase.rpc(
+      "charge_workspace_credit_for_generation",
+      { p_workspace_id: workspaceId },
+    );
+    if (workspaceCreditError) {
+      return {
+        error: "Unable to verify workspace credits. Please try again.",
       };
     }
   }

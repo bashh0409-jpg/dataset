@@ -26,6 +26,7 @@ type WorkspaceToolbarProps = {
   billingStatusError: string;
   isPro: boolean;
   isPersonalPro: boolean;
+  workspaceCreditBalance: number;
   workspaceId: string;
   model: "qwen" | "auto" | "claude" | "openai";
   workspaceName: string;
@@ -52,6 +53,7 @@ export default function WorkspaceToolbar({
   billingStatusError,
   isPro,
   isPersonalPro,
+  workspaceCreditBalance,
   workspaceId,
   model,
   workspaceName,
@@ -75,6 +77,7 @@ export default function WorkspaceToolbar({
   const [creditsError, setCreditsError] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  const hasPremiumAccess = isPro || workspaceCreditBalance > 0;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -100,7 +103,7 @@ export default function WorkspaceToolbar({
 
   useEffect(() => {
     if (!menuOpen) return;
-    if (!isPro) return;
+    if (!hasPremiumAccess) return;
     let active = true;
     void getWorkspaceProAiUsage(workspaceId)
       .then((result) => {
@@ -116,7 +119,12 @@ export default function WorkspaceToolbar({
         const resetMessage = resetsAt
           ? ` · 50 available in ${Math.max(1, Math.ceil((Date.parse(resetsAt) - Date.now()) / 60_000))} min`
           : "";
-        setCredits(`${remaining} of 50 premium requests${resetMessage}`);
+        const creditMessage = result.data.creditBalance > 0
+          ? ` · ${result.data.creditBalance} workspace credits`
+          : "";
+        setCredits(
+          `${remaining} of 50 premium requests${resetMessage}${creditMessage}`,
+        );
       })
       .catch(() => {
         if (!active) return;
@@ -126,7 +134,7 @@ export default function WorkspaceToolbar({
     return () => {
       active = false;
     };
-  }, [isPro, menuOpen, workspaceId]);
+  }, [hasPremiumAccess, menuOpen, workspaceId]);
 
   const runAction = async (name: string, action: () => Promise<void>) => {
     setBusyAction(name);
@@ -152,7 +160,7 @@ export default function WorkspaceToolbar({
     { value: "purple", label: "Purple", className: "bg-[#9271b5]" },
   ];
   const selectedModelLabel =
-    !isPro || model === "qwen"
+    !hasPremiumAccess || model === "qwen"
       ? "Standard"
       : model === "auto"
         ? "Auto"
@@ -221,9 +229,9 @@ export default function WorkspaceToolbar({
                     onModelChange(event.currentTarget.value);
                   }
                 }}
-                value={isPro ? model : "qwen"}
+                value={hasPremiumAccess ? model : "qwen"}
               >
-                {isPro ? (
+                {hasPremiumAccess ? (
                   <>
                     <option value="qwen">Standard</option>
                     <option value="auto">Auto</option>
@@ -251,9 +259,9 @@ export default function WorkspaceToolbar({
               </svg>
 
               <p className="text-xs font-medium tracking-tight leading-4  text-[#555850]">
-                {isPro ? credits : "Free plan · standard models"}
+                {hasPremiumAccess ? credits : "Free plan · standard models"}
               </p>
-              {isPro && creditsError && (
+              {hasPremiumAccess && creditsError && (
                 <p className="text-[10px] text-[#a64239]" role="status">
                   {creditsError}
                 </p>
@@ -510,6 +518,25 @@ export default function WorkspaceToolbar({
           >
             Workspace Pro
           </span>
+        ) : workspaceCreditBalance > 0 ? (
+          <button
+            aria-label={`${workspaceCreditBalance} workspace credits available. Manage credits`}
+            className="flex h-7 items-center rounded-full gap-0.5 border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f] transition hover:bg-[#e8f2e4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+            onClick={onManage}
+            title="Premium models use one workspace credit per request"
+            type="button"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="16px"
+              viewBox="48 -912 864 864"
+              width="16px"
+              fill="currentColor"
+            >
+              <path d="M240-192q-60 0-102-42T96-336v-288q0-60 42-102t102-42h480q60 0 102 42t42 102v288q0 60-42 102t-102 42H240Zm0-432h480q19 0 37 5.5t35 14.5v-20q0-30-21-51t-51-21H240q-30 0-51 21t-21 51v20q17-10 35-15t37-5Zm-63 110 430 105q8 2 16 0t15-7l135-112q-11-11-24.5-17.5T720-552H240q-20 0-38 11t-25 27Z" />
+            </svg>
+            {workspaceCreditBalance}
+          </button>
         ) : (
           <form action="/api/billing/checkout" method="post">
             <button

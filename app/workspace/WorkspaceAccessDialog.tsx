@@ -259,7 +259,11 @@ export default function WorkspaceAccessDialog({
               aria-label="Workspace AI credits"
               className="mb-4 rounded-md  bg-black/5 p-2 px-3"
             >
-              <div className="flex items-center justify-between gap-3">
+              <button
+                disabled={creditLoading}
+                onClick={() => void refreshCredits()}
+                className="flex w-full items-center justify-between gap-3"
+              >
                 <div>
                   <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
                     Workspace AI credits
@@ -282,14 +286,14 @@ export default function WorkspaceAccessDialog({
                       ? "Unavailable"
                       : `${creditBalance}`}
                 </p>
-              </div>
+              </button>
               {creditError && (
                 <p className="mt-2 text-[12px] text-[#b42318]" role="alert">
                   {creditError}
                 </p>
               )}
               <button
-                className="mt-2 text-[11px] hidden font-medium text-[#667085] underline-offset-2 hover:underline disabled:opacity-50"
+                className="mt-2 hidden text-[11px] font-medium text-[#667085] underline-offset-2 hover:underline disabled:opacity-50"
                 disabled={creditLoading}
                 onClick={() => void refreshCredits()}
                 type="button"

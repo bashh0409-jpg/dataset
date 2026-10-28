@@ -57,6 +57,7 @@ type Workspace = {
   name: string;
   role: "owner" | "member";
   hasProAccess: boolean;
+  creditBalance: number;
 };
 
 type AiModel = "qwen" | "auto" | "claude" | "openai";
@@ -1049,6 +1050,7 @@ export default function WorkspaceShell({
           billingStatusError={billingStatusError}
           isPro={activeWorkspace?.hasProAccess ?? isPro}
           isPersonalPro={isPro}
+          workspaceCreditBalance={activeWorkspace?.creditBalance ?? 0}
           workspaceId={activeWorkspace?.id ?? ""}
           model={aiModel}
           onArchiveConversation={() =>
@@ -1111,8 +1113,12 @@ export default function WorkspaceShell({
             <GeneratorPanel
               key={newConversationToken}
               workspaceId={activeWorkspace?.id ?? ""}
-              isPro={activeWorkspace?.hasProAccess ?? isPro}
+              isPro={
+                (activeWorkspace?.hasProAccess ?? isPro) ||
+                (activeWorkspace?.creditBalance ?? 0) > 0
+              }
               model={aiModel}
+              onWorkspaceCreditsChanged={() => router.refresh()}
               onChatSaved={handleChatSaved}
               onConversationOpened={setActiveConversationId}
               requestedConversationId={requestedConversationId}

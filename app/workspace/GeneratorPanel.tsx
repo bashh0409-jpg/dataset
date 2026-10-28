@@ -100,6 +100,7 @@ type GeneratorPanelProps = {
   isPro: boolean;
   model: "qwen" | "auto" | "claude" | "openai";
   requestedConversationId: string | null;
+  onWorkspaceCreditsChanged: () => void;
   onConversationOpened: (id: string) => void;
   onChatSaved: (conversation: AiConversationSummary) => void;
 };
@@ -109,6 +110,7 @@ export default function GeneratorPanel({
   isPro,
   model,
   requestedConversationId,
+  onWorkspaceCreditsChanged,
   onConversationOpened,
   onChatSaved,
 }: GeneratorPanelProps) {
@@ -418,6 +420,7 @@ export default function GeneratorPanel({
         model: isPro ? model : "qwen",
         workspaceId,
       });
+      onWorkspaceCreditsChanged();
 
       window.clearTimeout(phaseTimeout);
       if ("error" in result) {

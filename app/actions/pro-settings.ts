@@ -92,7 +92,13 @@ export async function getProAiSettings(): Promise<ProSettingsResult> {
 export async function getWorkspaceProAiUsage(
   workspaceIdInput: unknown,
 ): Promise<
-  | { data: { used: number; nextAvailableAt: string | null } }
+  | {
+      data: {
+        used: number;
+        nextAvailableAt: string | null;
+        creditBalance: number;
+      };
+    }
   | { error: string }
 > {
   const workspaceId = workspaceIdSchema.safeParse(workspaceIdInput);
@@ -116,6 +122,7 @@ export async function getWorkspaceProAiUsage(
       z.object({
         used: z.number().int().min(0).max(50),
         next_available_at: z.string().nullable(),
+        credit_balance: z.number().int().nonnegative(),
       }),
     )
     .length(1)
@@ -133,6 +140,7 @@ export async function getWorkspaceProAiUsage(
     data: {
       used: usage.data[0].used,
       nextAvailableAt,
+      creditBalance: usage.data[0].credit_balance,
     },
   };
 }
