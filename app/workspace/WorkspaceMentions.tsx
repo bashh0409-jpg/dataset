@@ -269,16 +269,14 @@ export default function WorkspaceMentions({
           if (open) {
             setOpen(false);
             setActionsOpen(false);
-          }
-          else void openMentions();
+          } else void openMentions();
         }}
         type="button"
       >
         <AtSign aria-hidden="true" className="size-[18px]" />
+
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-[#242620] px-1 text-[10px] leading-4 text-white">
-            {unreadCount}
-          </span>
+          <span className="absolute w-1 aspect-square -right-1 bottom-0 flex  items-center justify-center rounded-full bg-[#242620] px-1 text-[10px] leading-4 text-white"></span>
         )}
       </button>
 
@@ -327,7 +325,10 @@ export default function WorkspaceMentions({
 
           <div className="min-h-0 flex-1 tracking-tight font-semibold overflow-y-auto px-3 py-2">
             {error && (
-              <p className="mb-2 rounded bg-[#fff4f2] px-2 py-1.5 text-[11px] text-[#b42318]" role="alert">
+              <p
+                className="mb-2 rounded bg-[#fff4f2] px-2 py-1.5 text-[11px] text-[#b42318]"
+                role="alert"
+              >
                 {error}
               </p>
             )}
@@ -403,8 +404,23 @@ export default function WorkspaceMentions({
               onSubmit={submitMention}
             >
               <fieldset disabled={sending || loading}>
-                <legend className="mb-1.5 text-[11px] tracking-tight font-semibold text-[#50534b]">
-                  Mention workspace members
+                <legend className="mb-1.5 flex w-full items-center justify-between gap-2 text-[11px] tracking-tight font-semibold text-[#50534b]">
+                  <span>Mention workspace members</span>
+                  <button
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-[#4c6545] transition hover:bg-[#f0f5ed] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      mentionableMembers.length === 0 ||
+                      selectedRecipients.length === mentionableMembers.length
+                    }
+                    onClick={() =>
+                      setSelectedRecipients(
+                        mentionableMembers.map((member) => member.id),
+                      )
+                    }
+                    type="button"
+                  >
+                    Mention all
+                  </button>
                 </legend>
                 <div className="mb-2 flex max-h-20 flex-wrap gap-1 overflow-y-auto">
                   {mentionableMembers.length === 0 ? (
@@ -413,29 +429,32 @@ export default function WorkspaceMentions({
                     </p>
                   ) : (
                     mentionableMembers.map((member) => {
-                    const selected = selectedRecipients.includes(member.id);
-                    return (
-                      <label
-                        className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] transition ${
-                          selected
-                            ? "border-[#b8c5b0] bg-[#f0f5ed] text-[#3f5838]"
-                            : "border-[#e1e3de] text-[#555850] hover:bg-[#f7f8f5]"
-                        }`}
-                        key={member.id}
-                      >
-                        <input
-                          checked={selected}
-                          className="sr-only"
-                          onChange={() => toggleRecipient(member.id)}
-                          type="checkbox"
-                          value={member.id}
-                        />
-                        {selected && (
-                          <Check aria-hidden="true" className="hidden size-2.5" />
-                        )}
-                        {member.name || member.email || "Workspace member"}
-                      </label>
-                    );
+                      const selected = selectedRecipients.includes(member.id);
+                      return (
+                        <label
+                          className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] transition ${
+                            selected
+                              ? "border-[#b8c5b0] bg-[#f0f5ed] text-[#3f5838]"
+                              : "border-[#e1e3de] text-[#555850] hover:bg-[#f7f8f5]"
+                          }`}
+                          key={member.id}
+                        >
+                          <input
+                            checked={selected}
+                            className="sr-only"
+                            onChange={() => toggleRecipient(member.id)}
+                            type="checkbox"
+                            value={member.id}
+                          />
+                          {selected && (
+                            <Check
+                              aria-hidden="true"
+                              className="hidden size-2.5"
+                            />
+                          )}
+                          {member.name || member.email || "Workspace member"}
+                        </label>
+                      );
                     })
                   )}
                 </div>
@@ -499,10 +518,7 @@ export default function WorkspaceMentions({
             style={{
               position: "fixed",
               top: actionsMenuPosition.top,
-              left: Math.min(
-                actionsMenuPosition.left,
-                window.innerWidth - 180,
-              ),
+              left: Math.min(actionsMenuPosition.left, window.innerWidth - 180),
             }}
           >
             <button
