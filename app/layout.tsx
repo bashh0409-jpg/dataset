@@ -94,7 +94,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SmoothScroll />
         </Suspense>
         <Suspense fallback={null}>
-          <Navbar />
+        
         </Suspense>
         <Analytics />
         <SpeedInsights />

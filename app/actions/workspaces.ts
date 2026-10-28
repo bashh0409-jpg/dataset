@@ -20,6 +20,7 @@ export type WorkspaceMember = {
   email: string | null;
   role: "owner" | "member";
   joinedAt: string;
+  isCurrentUser: boolean;
 };
 
 type MembersResult =
@@ -64,6 +65,7 @@ export async function getWorkspaceMembers(
       email: member.member_email,
       role: member.member_role,
       joinedAt: member.member_joined_at,
+      isCurrentUser: member.member_id === user.id,
     })),
   };
 }

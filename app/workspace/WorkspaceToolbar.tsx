@@ -25,6 +25,7 @@ import type { AiConversationSummary } from "@/app/actions/ai-conversations";
 
 type WorkspaceToolbarProps = {
   billingStatusError: string;
+  canInvite: boolean;
   isPro: boolean;
   isPersonalPro: boolean;
   workspaceCreditBalance: number;
@@ -52,6 +53,7 @@ const buttonClass =
 
 export default function WorkspaceToolbar({
   billingStatusError,
+  canInvite,
   isPro,
   isPersonalPro,
   workspaceCreditBalance,
@@ -468,7 +470,7 @@ export default function WorkspaceToolbar({
       <div className="flex items-center gap-2">
         <button
           aria-label="Manage workspace"
-          className={buttonClass}
+          className={`${buttonClass} disabled:cursor-not-allowed`}
           onClick={onManage}
           type="button"
         >
@@ -476,8 +478,13 @@ export default function WorkspaceToolbar({
           Manage
         </button>
         <button
-          aria-label="Invite a teammate"
+          aria-label={
+            canInvite
+              ? "Invite a teammate"
+              : "Only workspace owners can invite teammates"
+          }
           className={buttonClass}
+          disabled={!canInvite}
           onClick={onInvite}
           type="button"
         >
@@ -533,7 +540,7 @@ export default function WorkspaceToolbar({
           <form action="/api/billing/checkout" method="post">
             <button
               aria-label="Subscribe to Synthetic Pro"
-              className="flex h-7 items-center rounded-full bg-black px-2 text-xs font-semibold tracking-tight text-white transition hover:bg-[#333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+              className="flex h-7 items-center rounded-lg bg-black px-2 text-xs font-semibold tracking-tight text-white transition hover:bg-[#333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
               type="submit"
             >
               Go Pro

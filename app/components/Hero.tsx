@@ -22,6 +22,7 @@ const Hero = () => {
           </h1>
         </div>
       </section>
+      
 
       {/* Bottom bar: buttons left, version right */}
       <div className="mt-10 grid grid-cols-2 items-end gap-6 md:col-span-2 md:mt-0">

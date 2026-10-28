@@ -115,6 +115,9 @@ export async function createWorkspaceMention(input: {
 
   const auth = await getAuthenticatedClient();
   if (!auth) return { error: "Please sign in again to send a mention." };
+  if (recipientIds.data.includes(auth.user.id)) {
+    return { error: "You can't mention yourself. Choose another workspace member." };
+  }
 
   const { error } = await auth.supabase.rpc("create_workspace_mention", {
     p_workspace_id: workspaceId.data,

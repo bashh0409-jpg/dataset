@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import Hero from "./components/Hero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import Navbar from "./components/Navbar";
 
 export default function Page() {
   return (
@@ -26,6 +27,7 @@ async function HomeContent() {
 
   return (
     <div>
+      <Navbar />
       <Hero />
       <section
         data-nav-theme="white"

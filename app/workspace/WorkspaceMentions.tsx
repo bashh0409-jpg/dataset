@@ -251,6 +251,7 @@ export default function WorkspaceMentions({
     const member = members.find((candidate) => candidate.id === memberId);
     return member?.name || member?.email || "Workspace member";
   };
+  const mentionableMembers = members.filter((member) => !member.isCurrentUser);
 
   return (
     <div className="relative" ref={containerRef}>
@@ -406,11 +407,16 @@ export default function WorkspaceMentions({
                   Mention workspace members
                 </legend>
                 <div className="mb-2 flex max-h-20 flex-wrap gap-1 overflow-y-auto">
-                  {members.map((member) => {
+                  {mentionableMembers.length === 0 ? (
+                    <p className="text-[11px] text-[#868880]">
+                      No other workspace members to mention.
+                    </p>
+                  ) : (
+                    mentionableMembers.map((member) => {
                     const selected = selectedRecipients.includes(member.id);
                     return (
                       <label
-                        className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] transition ${
+                        className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] transition ${
                           selected
                             ? "border-[#b8c5b0] bg-[#f0f5ed] text-[#3f5838]"
                             : "border-[#e1e3de] text-[#555850] hover:bg-[#f7f8f5]"
@@ -425,12 +431,13 @@ export default function WorkspaceMentions({
                           value={member.id}
                         />
                         {selected && (
-                          <Check aria-hidden="true" className="size-2.5" />
+                          <Check aria-hidden="true" className="hidden size-2.5" />
                         )}
                         {member.name || member.email || "Workspace member"}
                       </label>
                     );
-                  })}
+                    })
+                  )}
                 </div>
                 <label className="sr-only" htmlFor="workspace-mention-message">
                   Message

@@ -146,6 +146,20 @@ export async function createWorkspaceInvite(
     return { error: "Please sign in again to invite a teammate." };
   }
 
+  const { data: membership, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", parsed.data.workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    return { error: "Unable to verify workspace permissions. Please try again." };
+  }
+  if (membership?.role !== "owner") {
+    return { error: "Only workspace owners can invite teammates." };
+  }
+
   if (user.email?.toLowerCase() === parsed.data.email.toLowerCase()) {
     return { error: "You can't invite your own email address." };
   }
@@ -216,8 +230,8 @@ export async function createWorkspaceInvite(
         from: senderEmail,
         to: [parsed.data.email],
         subject: `You're invited to join ${workspace.name}`,
-        text: `${safeInviterName} invited you to join ${workspace.name} on Synthetic. Accept your invitation within 7 days: ${inviteUrl}`,
-        html: `<main style="max-width:560px;margin:40px auto;padding:32px;font-family:Arial,sans-serif;color:#101828"><p style="color:#3282ff;font-size:13px;font-weight:600">SYNTHETIC</p><h1 style="font-size:24px;letter-spacing:-0.5px">You're invited</h1><p style="color:#475467;line-height:1.6"><strong>${safeSenderName}</strong> invited you to join <strong>${safeWorkspaceName}</strong> on Synthetic.</p><p style="margin:28px 0"><a href="${safeInviteUrl}" style="display:inline-block;padding:12px 18px;border-radius:7px;background:#3282ff;color:white;text-decoration:none;font-weight:600">Accept invitation</a></p><p style="color:#667085;font-size:13px;line-height:1.6">This link is single-use, expires in 7 days, and only works for the email address this invitation was sent to.</p></main>`,
+        text: `${safeInviterName} invited you to join ${workspace.name} on Synthetic.\n\nAccept the invitation: ${inviteUrl}\n\nThis link expires in 7 days and only works for the email address it was sent to.`,
+        html: `<p>${safeSenderName} invited you to join <strong>${safeWorkspaceName}</strong> on Synthetic.</p><p><a href="${safeInviteUrl}">Accept invitation</a></p><p>This link expires in 7 days and only works for the email address it was sent to.</p>`,
       }),
       signal: AbortSignal.timeout(10_000),
     });

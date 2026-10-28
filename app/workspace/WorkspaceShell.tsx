@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -189,6 +190,11 @@ export default function WorkspaceShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [workspaceMenuPosition, setWorkspaceMenuPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const [accessDialog, setAccessDialog] = useState<"invite" | "manage" | null>(
     null,
   );
@@ -216,9 +222,36 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
+  const workspacePickerRef = useRef<HTMLDivElement>(null);
+  const workspacePickerButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceFlyoutRef = useRef<HTMLElement>(null);
   const conversationListRequestsRef = useRef(
     new Map<string, ReturnType<typeof listAiConversations>>(),
   );
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !workspacePickerRef.current?.contains(target) &&
+        !workspaceFlyoutRef.current?.contains(target)
+      ) {
+        setWorkspaceMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWorkspaceMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [workspaceMenuOpen]);
 
   useEffect(() => {
     if (
@@ -426,6 +459,7 @@ export default function WorkspaceShell({
   };
 
   const switchWorkspace = (workspaceId: string) => {
+    setWorkspaceMenuOpen(false);
     if (workspaceId === activeWorkspaceId) return;
     setActiveWorkspaceId(workspaceId);
     setSavedConversations([]);
@@ -435,6 +469,22 @@ export default function WorkspaceShell({
     setOpenChatMenuId(null);
     setRenamingChatId(null);
     setConversationError("");
+  };
+
+  const toggleWorkspaceMenu = () => {
+    if (workspaceMenuOpen) {
+      setWorkspaceMenuOpen(false);
+      return;
+    }
+
+    const bounds = workspacePickerButtonRef.current?.getBoundingClientRect();
+    if (bounds) {
+      setWorkspaceMenuPosition({
+        left: Math.max(8, Math.min(bounds.right + 8, window.innerWidth - 276)),
+        top: Math.max(8, Math.min(bounds.top, window.innerHeight - 300)),
+      });
+    }
+    setWorkspaceMenuOpen(true);
   };
 
   const openSavedChat = (id: string) => {
@@ -935,35 +985,101 @@ export default function WorkspaceShell({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-[9px] py-[8px] max-[640px]:px-[6px]">
-          <div className="flex  items-center justify-between gap-2 px-[1px]">
-            <p className="truncate mb-4 text-[12px] font-medium my-2 tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
-              {activeWorkspace?.name ?? "Workspace"}
-            </p>
+        <div className="min-h-0 flex-1 mt-2 overflow-y-auto px-[9px] gap-2 max-[640px]:px-[6px]">
+          <div className="flex  items-center  justify-between gap-2 px-[1px]">
             {workspaces.length > 1 && (
-              <label className="relative">
-                <span className="sr-only">Select workspace</span>
-                <select
+              <div className="relative" ref={workspacePickerRef}>
+                <button
+                  aria-expanded={workspaceMenuOpen}
+                  aria-haspopup="dialog"
                   aria-label="Select workspace"
-                  className="absolute inset-0 size-full cursor-pointer opacity-0"
-                  onChange={(event) => switchWorkspace(event.target.value)}
-                  value={activeWorkspaceId}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-1 py-1 text-left text-[#686a64] transition hover:bg-[#eff0ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                  onClick={toggleWorkspaceMenu}
+                  ref={workspacePickerButtonRef}
+                  title="Select workspace"
+                  type="button"
                 >
-                  {workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="size-[13px] text-[#858780]"
-                />
-              </label>
+                  <span className="truncate text-[12px] font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
+                    {activeWorkspace?.name ?? "Workspace"}
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`size-[14px] shrink-0 transition-transform ${workspaceMenuOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {workspaceMenuOpen &&
+                  workspaceMenuPosition &&
+                  createPortal(
+                    <section
+                      aria-label="Workspaces"
+                      aria-modal="false"
+                      className="fixed z-[100] w-[min(260px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
+                      ref={workspaceFlyoutRef}
+                      role="dialog"
+                      style={workspaceMenuPosition}
+                    >
+                      
+                      <header className="flex py-0.5 px-2 shrink-0 items-center justify-between border-b border-[#e7e8e4]">
+                        <h2 className="text-[13px]  font-semibold tracking-tight text-[#60625d]">
+                          Workspaces
+                        </h2>
+                        <div className="flex items-center capitalize tracking-tight gap-1">
+                          {" "}
+                          <span className="text-[12px] font-semibold text-[#686a64]">
+                             {workspaces.length}{" "}
+                          {workspaces.length === 1 ? "workspace" : "workspaces"}
+                          </span>
+                         
+                          
+                        </div>
+                      </header>
+                      <div className="max-h-[min(60vh,360px)] font-semibold overflow-y-auto p-1">
+                        {workspaces.map((workspace) => {
+                          const selected = workspace.id === activeWorkspace?.id;
+                          return (
+                            <button
+                              aria-pressed={selected}
+                              className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#858780] ${
+                                selected
+                                  ? "bg-[#f0f3eb] text-[#3f5838]"
+                                  : "text-[#555850] hover:bg-[#f4f5f1]"
+                              }`}
+                              key={workspace.id}
+                              onClick={() => switchWorkspace(workspace.id)}
+                              type="button"
+                            >
+                              <span className="min-w-0 flex-1 truncate">
+                                {workspace.name}
+                              </span>
+                              {selected && (
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  height="16px"
+                                  viewBox="0 -960 960 960"
+                                  width="16px"
+                                  fill="currentColor"
+                                  
+                                >
+                                  <path d="M0-160v-80h160v-40q-33 0-56.5-23.5T80-360v-400q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v400q0 33-23.5 56.5T800-280v40h160v80H0Zm160-200h640v-400H160v400Zm0 0v-400 400Z" />
+                                </svg>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>,
+                    document.body,
+                  )}
+              </div>
+            )}
+            {workspaces.length <= 1 && (
+              <p className="truncate text-[12px] font-medium my-2 tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
+                {activeWorkspace?.name ?? "Workspace"}
+              </p>
             )}
           </div>
 
-          <nav aria-label="Workspace sections" className="space-y-[2px]">
+          <nav aria-label="Workspace  sections" className="space-y-[2px] mt-4">
             {navigation.map(({ id, label, icon, comingSoon }) => (
               <button
                 aria-current={activeView === id ? "page" : undefined}
@@ -1142,6 +1258,7 @@ export default function WorkspaceShell({
         <WorkspaceToolbar
           activeConversation={activeConversation}
           billingStatusError={billingStatusError}
+          canInvite={activeWorkspace?.role === "owner"}
           isPro={activeWorkspace?.hasProAccess ?? isPro}
           isPersonalPro={isPro}
           workspaceCreditBalance={activeWorkspace?.creditBalance ?? 0}
@@ -1181,7 +1298,11 @@ export default function WorkspaceShell({
               : Promise.resolve()
           }
           onManage={() => setAccessDialog("manage")}
-          onInvite={() => setAccessDialog("invite")}
+          onInvite={() => {
+            if (activeWorkspace?.role === "owner") {
+              setAccessDialog("invite");
+            }
+          }}
           workspaceName={activeWorkspace?.name ?? "Your workspace"}
         />
         {accessDialog && activeWorkspace && (

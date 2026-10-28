@@ -223,12 +223,10 @@ export default function WorkspaceAccessDialog({
                 className="mt-4 flex items-start gap-2 rounded-lg border border-[#d1fadf] bg-[#f6fef9] p-1 px-2"
                 role="status"
               >
-                
                 <div>
                   <p className="text-[13px] tracking-tight font-semibold text-[#027a48]">
                     We sent the invite to {sentTo}.
                   </p>
-                  
                 </div>
               </div>
             )}
@@ -339,7 +337,9 @@ export default function WorkspaceAccessDialog({
                 {members.map((member) => (
                   <li className="flex items-center gap-3 py-3" key={member.id}>
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#eff4ff] text-[12px] font-semibold uppercase text-[#3538cd]">
-                      {(member.name || member.email || "?").slice(0, 1)}
+                      <p className="geist text-left text-sm font-semibold leading-4 tracking-tight text-[#999]">
+                        {(member.name || member.email || "?").slice(0, 1)}
+                      </p>
                     </span>
 
                     <div className="min-w-0 flex-1">
