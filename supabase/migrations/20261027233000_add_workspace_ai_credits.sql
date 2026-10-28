@@ -331,7 +331,7 @@ begin
           updated_at = now();
 
   insert into public.workspace_credit_ledger (
-    workspace_id, purchaser_id, purchase_id, polar_order_id, amount, reason
+    workspace_id, user_id, purchase_id, polar_order_id, amount, reason
   )
   values (
     v_purchase.workspace_id,
