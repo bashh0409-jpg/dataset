@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import Hero from "./components/Hero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,6 +13,8 @@ export default function Page() {
 }
 
 async function HomeContent() {
+  await connection();
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
