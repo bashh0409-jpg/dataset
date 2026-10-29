@@ -22,6 +22,7 @@ import {
   ZoomOut,
   Key,
   KeyRound,
+  Network,
 } from "lucide-react";
 import {
   useCallback,
@@ -37,6 +38,7 @@ import { createPortal } from "react-dom";
 import {
   getAiConversation,
   saveAiGeneratedArtifact,
+  saveAiGeneratedArtifactPositions,
   saveAiConversation,
   type AiGeneratedArtifact,
   type AiConversationSummary,
@@ -59,6 +61,7 @@ type GeneratedDataset = {
   records: GeneratedTable["records"];
   count: number;
   seed: number;
+  artifactId?: string;
 };
 
 type DataView = "table" | "json" | "csv" | "schema";
@@ -156,6 +159,7 @@ export default function GeneratorPanel({
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState("");
+  const [schemaLayoutError, setSchemaLayoutError] = useState("");
   const [manualName, setManualName] = useState("users");
   const [manualCount, setManualCount] = useState("25");
   const [manualFields, setManualFields] = useState(defaultManualFields);
@@ -223,6 +227,7 @@ export default function GeneratorPanel({
     position: { x: number; y: number };
   } | null>(null);
   const schemaTablePositionFrameRef = useRef<number | null>(null);
+  const schemaLayoutSaveRef = useRef(Promise.resolve());
   const schemaTablePositionUpdateRef = useRef<{
     tableName: string;
     x: number;
@@ -283,6 +288,55 @@ export default function GeneratorPanel({
     height: minimumSchemaCanvasHeight,
   });
 
+  const persistSchemaLayout = useCallback(
+    (positions: Record<string, { x: number; y: number }>) => {
+      if (!conversationId) return;
+      const artifactPositions = generatedTables.flatMap((table) => {
+        const position = positions[table.name];
+        return table.artifactId && position
+          ? [{ artifactId: table.artifactId, position }]
+          : [];
+      });
+      if (artifactPositions.length === 0) return;
+
+      const save = async () => {
+        try {
+          const result = await saveAiGeneratedArtifactPositions({
+            conversationId,
+            workspaceId,
+            positions: artifactPositions,
+          });
+          if ("error" in result) {
+            setSchemaLayoutError(result.error);
+            return;
+          }
+
+          setSchemaLayoutError("");
+          const positionsById = new Map(
+            artifactPositions.map(({ artifactId, position }) => [
+              artifactId,
+              position,
+            ]),
+          );
+          setArtifacts((current) =>
+            current.map((artifact) => ({
+              ...artifact,
+              canvasPosition:
+                positionsById.get(artifact.id) ?? artifact.canvasPosition,
+            })),
+          );
+        } catch {
+          setSchemaLayoutError(
+            "A network error occurred while saving the schema layout.",
+          );
+        }
+      };
+      schemaLayoutSaveRef.current = schemaLayoutSaveRef.current.then(save);
+      return schemaLayoutSaveRef.current;
+    },
+    [conversationId, generatedTables, workspaceId],
+  );
+
   const generatedCsv = dataset
     ? recordsToCsv(dataset.fields, dataset.records)
     : "";
@@ -301,6 +355,7 @@ export default function GeneratorPanel({
   }, []);
   const resetSchemaCanvas = useCallback(() => {
     setSchemaTablePositions({});
+    setSchemaLayoutError("");
     setSchemaCanvasOffset({ x: 0, y: 0 });
     schemaCanvasRecenteringRef.current = {
       left: false,
@@ -443,6 +498,157 @@ export default function GeneratorPanel({
       false,
     );
   }, [applySchemaZoom, schemaZoom]);
+  const cleanSchemaLayout = useCallback(() => {
+    const diagram = schemaDiagramRef.current;
+    if (!diagram || generatedTables.length === 0) return;
+
+    const tableElements = Array.from(
+      diagram.querySelectorAll<HTMLElement>("[data-schema-table]"),
+    );
+    const elementsByName = new Map(
+      tableElements.map((element) => [element.dataset.schemaTable, element]),
+    );
+    const childrenByParent = new Map<string, Set<string>>();
+    const parentsByChild = new Map<string, Set<string>>();
+    const parentCountByTable = new Map(
+      generatedTables.map((table) => [table.name, 0]),
+    );
+
+    generatedTables.forEach((table) => {
+      const parents = new Set(
+        table.fields
+          .map((field) => field.references?.table)
+          .filter(
+            (name): name is string =>
+              typeof name === "string" &&
+              name !== table.name &&
+              parentCountByTable.has(name),
+          ),
+      );
+      parentsByChild.set(table.name, parents);
+      parents.forEach((parent) => {
+        const children = childrenByParent.get(parent) ?? new Set<string>();
+        children.add(table.name);
+        childrenByParent.set(parent, children);
+      });
+      parentCountByTable.set(table.name, parents.size);
+    });
+
+    const depths = new Map(generatedTables.map((table) => [table.name, 0]));
+    const queue = generatedTables
+      .filter((table) => parentCountByTable.get(table.name) === 0)
+      .map((table) => table.name);
+    const orderedTables = new Set<string>();
+
+    while (queue.length > 0) {
+      const parent = queue.shift()!;
+      orderedTables.add(parent);
+      for (const child of childrenByParent.get(parent) ?? []) {
+        depths.set(
+          child,
+          Math.max(depths.get(child) ?? 0, (depths.get(parent) ?? 0) + 1),
+        );
+        const remainingParents = (parentCountByTable.get(child) ?? 0) - 1;
+        parentCountByTable.set(child, remainingParents);
+        if (remainingParents === 0) queue.push(child);
+      }
+    }
+
+    const maxDepth = Math.max(0, ...depths.values());
+    generatedTables.forEach((table) => {
+      if (!orderedTables.has(table.name)) {
+        depths.set(table.name, maxDepth + 1);
+      }
+    });
+
+    const tablesByDepth = new Map<number, GeneratedDataset[]>();
+    generatedTables.forEach((table) => {
+      const depth = depths.get(table.name) ?? 0;
+      const tables = tablesByDepth.get(depth) ?? [];
+      tables.push(table);
+      tablesByDepth.set(depth, tables);
+    });
+
+    const originalOrder = new Map(
+      generatedTables.map((table, index) => [table.name, index]),
+    );
+    const tableOrder = new Map<number, string[]>();
+    for (const [depth, tables] of tablesByDepth) {
+      tableOrder.set(depth, tables.map((table) => table.name));
+    }
+
+    const sortLayerByNeighbors = (
+      depth: number,
+      getNeighbors: (tableName: string) => Set<string>,
+      neighborDepth: number,
+    ) => {
+      const layer = tableOrder.get(depth);
+      const neighbors = tableOrder.get(neighborDepth);
+      if (!layer || !neighbors) return;
+      const neighborIndexes = new Map(
+        neighbors.map((tableName, index) => [tableName, index]),
+      );
+      layer.sort((first, second) => {
+        const score = (tableName: string) => {
+          const indexes = [...getNeighbors(tableName)]
+            .map((neighbor) => neighborIndexes.get(neighbor))
+            .filter((index): index is number => index !== undefined);
+          return indexes.length > 0
+            ? indexes.reduce((total, index) => total + index, 0) / indexes.length
+            : (originalOrder.get(tableName) ?? 0) + generatedTables.length;
+        };
+        return score(first) - score(second);
+      });
+    };
+
+    const depthCount = Math.max(...tableOrder.keys()) + 1;
+    for (let pass = 0; pass < 4; pass += 1) {
+      for (let depth = 1; depth < depthCount; depth += 1) {
+        sortLayerByNeighbors(
+          depth,
+          (tableName) => parentsByChild.get(tableName) ?? new Set(),
+          depth - 1,
+        );
+      }
+      for (let depth = depthCount - 2; depth >= 0; depth -= 1) {
+        sortLayerByNeighbors(
+          depth,
+          (tableName) => childrenByParent.get(tableName) ?? new Set(),
+          depth + 1,
+        );
+      }
+    }
+
+    const nextPositions: Record<string, { x: number; y: number }> = {};
+    let columnX = 80;
+    for (let depth = 0; depth < depthCount; depth += 1) {
+      const tables = tableOrder.get(depth) ?? [];
+      const columnWidth = Math.max(
+        0,
+        ...tables.map(
+          (tableName) => elementsByName.get(tableName)?.offsetWidth ?? 0,
+        ),
+      );
+      let y = 80;
+      for (const tableName of tables) {
+        const element = elementsByName.get(tableName);
+        if (!element) continue;
+
+        nextPositions[tableName] = {
+          x: columnX - element.offsetLeft,
+          y: y - element.offsetTop,
+        };
+        y += element.offsetHeight + 112;
+      }
+      columnX += columnWidth + 280;
+    }
+
+    setSchemaTablePositions(nextPositions);
+    void persistSchemaLayout(nextPositions);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(fitSchemaToView);
+    });
+  }, [fitSchemaToView, generatedTables, persistSchemaLayout]);
   const extendSchemaCanvas = useCallback(() => {
     const viewport = schemaCanvasViewportRef.current;
     if (!viewport) return;
@@ -904,6 +1110,68 @@ export default function GeneratorPanel({
           angle,
         };
       };
+      const routedSegments: {
+        orientation: "horizontal" | "vertical";
+        coordinate: number;
+        start: number;
+        end: number;
+      }[] = [];
+      const getRouteSegments = (
+        points: { x: number; y: number }[],
+      ): typeof routedSegments =>
+        points.slice(1).flatMap<typeof routedSegments[number]>((point, index) => {
+          const previous = points[index]!;
+          if (Math.abs(point.x - previous.x) < 1) return [];
+          if (Math.abs(point.y - previous.y) < 1) {
+            return [
+              {
+                orientation: "horizontal" as const,
+                coordinate: point.y,
+                start: Math.min(previous.x, point.x),
+                end: Math.max(previous.x, point.x),
+              },
+            ];
+          }
+          return [
+            {
+              orientation: "vertical" as const,
+              coordinate: point.x,
+              start: Math.min(previous.y, point.y),
+              end: Math.max(previous.y, point.y),
+            },
+          ];
+        });
+      const getRouteConflict = (points: { x: number; y: number }[]) =>
+        getRouteSegments(points).reduce<number>((conflicts, segment) => {
+          const routeConflicts = routedSegments.reduce(
+            (total, routed) => {
+              if (routed.orientation === segment.orientation) {
+                if (Math.abs(routed.coordinate - segment.coordinate) > 2) {
+                  return total;
+                }
+                const sharedLength = Math.max(
+                  0,
+                  Math.min(segment.end, routed.end) -
+                    Math.max(segment.start, routed.start),
+                );
+                return total + sharedLength;
+              }
+
+              const horizontal =
+                segment.orientation === "horizontal" ? segment : routed;
+              const vertical =
+                segment.orientation === "vertical" ? segment : routed;
+              const crosses =
+                vertical.coordinate > horizontal.start + 2 &&
+                vertical.coordinate < horizontal.end - 2 &&
+                horizontal.coordinate > vertical.start + 2 &&
+                horizontal.coordinate < vertical.end - 2;
+              return total + (crosses ? 1_000 : 0);
+            },
+            0,
+          );
+          return conflicts + routeConflicts;
+        }, 0);
       const paths = generatedTables.flatMap((sourceTable) =>
         sourceTable.fields.flatMap((field) => {
           if (!field.references) return [];
@@ -968,14 +1236,15 @@ export default function GeneratorPanel({
             const maxX = Math.max(...tableBounds.map((table) => table.right));
             const minY = Math.min(...tableBounds.map((table) => table.top));
             const maxY = Math.max(...tableBounds.map((table) => table.bottom));
+            const routeLane = 32 + routedSegments.length * 20;
             const xChannels = [
               middleX,
               ...tableBounds.flatMap((table) => [
                 table.left - 20,
                 table.right + 20,
               ]),
-              minX - 20,
-              maxX + 20,
+              minX - routeLane,
+              maxX + routeLane,
             ];
             const yChannels = [
               (sourceY + targetY) / 2,
@@ -983,8 +1252,8 @@ export default function GeneratorPanel({
                 table.top - 20,
                 table.bottom + 20,
               ]),
-              minY - 20,
-              maxY + 20,
+              minY - routeLane,
+              maxY + routeLane,
             ];
             const isHorizontalClear = (
               x1: number,
@@ -1055,16 +1324,19 @@ export default function GeneratorPanel({
               ),
             ];
             const selectedRoute = clearRoutes.sort(
-              (first, second) => first.distance - second.distance,
+              (first, second) =>
+                first.distance +
+                getRouteConflict(first.points) * 1_000 -
+                (second.distance + getRouteConflict(second.points) * 1_000),
             )[0];
-            const points = selectedRoute
-              ? selectedRoute.points
-              : [
+            const fallbackPoints = [
                   { x: sourceX, y: sourceY },
                   { x: sourceOnRight ? maxX + 20 : minX - 20, y: sourceY },
                   { x: sourceOnRight ? maxX + 20 : minX - 20, y: targetY },
                   { x: targetX, y: targetY },
                 ];
+            const points = selectedRoute?.points ?? fallbackPoints;
+            routedSegments.push(...getRouteSegments(points));
             return {
               path:
                 selectedRoute?.path ??
@@ -1577,6 +1849,14 @@ export default function GeneratorPanel({
         }
         if (savedArtifacts.length > 0) {
           setArtifacts((current) => [...current, ...savedArtifacts]);
+          setGeneratedTables((current) =>
+            current.map((table) => ({
+              ...table,
+              artifactId: savedArtifacts.find(
+                (artifact) => artifact.name === table.name,
+              )?.id,
+            })),
+          );
           const lastArtifact = savedArtifacts.at(-1);
           if (lastArtifact) {
             const linkedMessages = nextMessages.map((message, index) =>
@@ -2186,6 +2466,7 @@ export default function GeneratorPanel({
                                     records: artifact.records,
                                     count: artifact.count,
                                     seed: artifact.seed,
+                                    artifactId: artifact.id,
                                   }));
                                 setGeneratedTables(
                                   linkedDatasets.length > 1
@@ -2197,16 +2478,44 @@ export default function GeneratorPanel({
                                           records: linkedArtifact.records,
                                           count: linkedArtifact.count,
                                           seed: linkedArtifact.seed,
+                                          artifactId: linkedArtifact.id,
                                         },
                                       ],
                                 );
                                 resetSchemaCanvas();
+                                const openedArtifacts =
+                                  linkedDatasets.length > 1
+                                    ? linkedDatasets
+                                    : [
+                                        {
+                                          name: linkedArtifact.name,
+                                          fields: linkedArtifact.fields,
+                                          records: linkedArtifact.records,
+                                          count: linkedArtifact.count,
+                                          seed: linkedArtifact.seed,
+                                          artifactId: linkedArtifact.id,
+                                        },
+                                      ];
+                                setSchemaTablePositions(
+                                  Object.fromEntries(
+                                    openedArtifacts.flatMap((artifact) => {
+                                      const savedPosition = artifacts.find(
+                                        (candidate) =>
+                                          candidate.id === artifact.artifactId,
+                                      )?.canvasPosition;
+                                      return savedPosition
+                                        ? [[artifact.name, savedPosition]]
+                                        : [];
+                                    }),
+                                  ),
+                                );
                                 setDataset({
                                   name: linkedArtifact.name,
                                   fields: linkedArtifact.fields,
                                   records: linkedArtifact.records,
                                   count: linkedArtifact.count,
                                   seed: linkedArtifact.seed,
+                                  artifactId: linkedArtifact.id,
                                 });
                               }
                               setShowDataPanel(true);
@@ -2882,6 +3191,24 @@ export default function GeneratorPanel({
                       </button>
                     </div>
                     <button
+                      aria-label="Auto clean schema layout"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      onClick={cleanSchemaLayout}
+                      title="Arrange tables to make relationships easier to follow"
+                      type="button"
+                    >
+                      <Network aria-hidden="true" className="size-3.5" />
+                      
+                    </button>
+                    {schemaLayoutError && (
+                      <span
+                        className="max-w-40 text-[10px] leading-3 text-[#a64239]"
+                        role="alert"
+                      >
+                        {schemaLayoutError}
+                      </span>
+                    )}
+                    <button
                       aria-label="Fit schema to view"
                       className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={fitSchemaToView}
@@ -3072,12 +3399,25 @@ export default function GeneratorPanel({
                                 }`}
                                 data-schema-table-handle
                                 onPointerCancel={(event) => {
-                                  if (
-                                    schemaTableDragRef.current?.pointerId !==
-                                    event.pointerId
-                                  ) {
-                                    return;
-                                  }
+                                  const drag = schemaTableDragRef.current;
+                                  if (drag?.pointerId !== event.pointerId) return;
+                                  const zoom = schemaZoomRef.current;
+                                  const position = {
+                                    x:
+                                      drag.position.x +
+                                      (event.clientX - drag.startX) / zoom,
+                                    y:
+                                      drag.position.y +
+                                      (event.clientY - drag.startY) / zoom,
+                                  };
+                                  setSchemaTablePositions((positions) => ({
+                                    ...positions,
+                                    [drag.tableName]: position,
+                                  }));
+                                  void persistSchemaLayout({
+                                    ...schemaTablePositions,
+                                    [drag.tableName]: position,
+                                  });
                                   schemaTableDragRef.current = null;
                                   setDraggingSchemaTable(null);
                                 }}
@@ -3158,12 +3498,25 @@ export default function GeneratorPanel({
                                   recenterSchemaCanvasForTable(table);
                                 }}
                                 onPointerUp={(event) => {
-                                  if (
-                                    schemaTableDragRef.current?.pointerId !==
-                                    event.pointerId
-                                  ) {
-                                    return;
-                                  }
+                                  const drag = schemaTableDragRef.current;
+                                  if (drag?.pointerId !== event.pointerId) return;
+                                  const zoom = schemaZoomRef.current;
+                                  const position = {
+                                    x:
+                                      drag.position.x +
+                                      (event.clientX - drag.startX) / zoom,
+                                    y:
+                                      drag.position.y +
+                                      (event.clientY - drag.startY) / zoom,
+                                  };
+                                  setSchemaTablePositions((positions) => ({
+                                    ...positions,
+                                    [drag.tableName]: position,
+                                  }));
+                                  void persistSchemaLayout({
+                                    ...schemaTablePositions,
+                                    [drag.tableName]: position,
+                                  });
                                   schemaTableDragRef.current = null;
                                   setDraggingSchemaTable(null);
                                 }}

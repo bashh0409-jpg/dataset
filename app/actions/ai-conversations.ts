@@ -11,6 +11,10 @@ import {
 
 const conversationIdSchema = z.uuid();
 const workspaceIdSchema = z.uuid();
+const schemaPositionSchema = z.object({
+  x: z.number().finite().min(-1_000_000).max(1_000_000),
+  y: z.number().finite().min(-1_000_000).max(1_000_000),
+});
 const messagesSchema = z
   .array(
     z.object({
@@ -155,6 +159,26 @@ const artifactInputSchema = z
     }
   });
 
+const artifactPositionsInputSchema = z.object({
+  conversationId: conversationIdSchema,
+  workspaceId: workspaceIdSchema,
+  positions: z
+    .array(
+      z.object({
+        artifactId: z.uuid(),
+        position: schemaPositionSchema,
+      }),
+    )
+    .min(1)
+    .max(25)
+    .refine(
+      (positions) =>
+        new Set(positions.map((entry) => entry.artifactId)).size ===
+        positions.length,
+      "Each generated table can only have one position.",
+    ),
+});
+
 const storedArtifactSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(80),
@@ -164,6 +188,7 @@ const storedArtifactSchema = z.object({
   ).max(500),
   count: z.number().int().min(1).max(500),
   seed: z.number().int().min(0).max(2_147_483_647),
+  canvas_position: schemaPositionSchema.nullable(),
   created_at: z.iso.datetime({ offset: true }),
 });
 
@@ -174,6 +199,7 @@ export type AiGeneratedArtifact = {
   records: GeneratedRecord[];
   count: number;
   seed: number;
+  canvasPosition: { x: number; y: number } | null;
   createdAt: string;
 };
 
@@ -327,14 +353,14 @@ export async function getAiConversation(
 
   const { data: artifactRows, error: artifactsError } = await auth.supabase
     .from("ai_generated_artifacts")
-    .select("id, name, fields, records, count, seed, created_at")
+    .select("id, name, fields, records, count, seed, canvas_position, created_at")
     .eq("conversation_id", parsedInput.data.id)
     .order("created_at", { ascending: true });
 
   if (artifactsError) {
     return {
       error:
-        "Unable to load generated data. Apply the generated artifacts migration, then try again.",
+        "Unable to load generated data. Apply the generated artifacts and canvas positions migrations, then try again.",
     };
   }
 
@@ -361,6 +387,7 @@ export async function getAiConversation(
       records: artifact.records,
       count: artifact.count,
       seed: artifact.seed,
+      canvasPosition: artifact.canvas_position,
       createdAt: artifact.created_at,
     });
   }
@@ -400,13 +427,13 @@ export async function saveAiGeneratedArtifact(
       count: parsedInput.data.count,
       seed: parsedInput.data.seed,
     })
-    .select("id, name, fields, records, count, seed, created_at")
+    .select("id, name, fields, records, count, seed, canvas_position, created_at")
     .single();
 
   if (error || !data) {
     return {
       error:
-        "Unable to save generated data. Confirm the generated artifacts migration is applied and try again.",
+        "Unable to save generated data. Confirm the generated artifacts and canvas positions migrations are applied, then try again.",
     };
   }
 
@@ -423,9 +450,59 @@ export async function saveAiGeneratedArtifact(
       records: parsedArtifact.data.records,
       count: parsedArtifact.data.count,
       seed: parsedArtifact.data.seed,
+      canvasPosition: parsedArtifact.data.canvas_position,
       createdAt: parsedArtifact.data.created_at,
     },
   };
+}
+
+export async function saveAiGeneratedArtifactPositions(
+  input: unknown,
+): Promise<ConversationResult<null>> {
+  const parsedInput = artifactPositionsInputSchema.safeParse(input);
+  if (!parsedInput.success) {
+    return { error: "The schema layout is invalid and could not be saved." };
+  }
+
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
+
+  const { data: conversation, error: conversationError } = await auth.supabase
+    .from("ai_conversations")
+    .select("id")
+    .eq("id", parsedInput.data.conversationId)
+    .eq("workspace_id", parsedInput.data.workspaceId)
+    .maybeSingle();
+  if (conversationError || !conversation) {
+    return { error: "Unable to save the schema layout for this chat." };
+  }
+
+  const artifactIds = parsedInput.data.positions.map(
+    (entry) => entry.artifactId,
+  );
+  const { data: artifacts, error: artifactsError } = await auth.supabase
+    .from("ai_generated_artifacts")
+    .select("id")
+    .eq("conversation_id", parsedInput.data.conversationId)
+    .in("id", artifactIds);
+  if (artifactsError || artifacts?.length !== artifactIds.length) {
+    return { error: "Unable to verify generated tables for this schema." };
+  }
+
+  for (const { artifactId, position } of parsedInput.data.positions) {
+    const { data: updatedArtifact, error } = await auth.supabase
+      .from("ai_generated_artifacts")
+      .update({ canvas_position: position })
+      .eq("id", artifactId)
+      .eq("conversation_id", parsedInput.data.conversationId)
+      .select("id")
+      .single();
+    if (error || !updatedArtifact) {
+      return { error: "Unable to save the schema layout. Please try again." };
+    }
+  }
+
+  return { data: null };
 }
 
 export async function saveAiConversation(
