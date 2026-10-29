@@ -2005,7 +2005,7 @@ export default function GeneratorPanel({
                           {message.role === "assistant" &&
                             message.modelUsed && (
                               <p
-                                className="mt-1 text-[10px] leading-4 text-[#777a72]"
+                                className="mt-1 text-[10px] font-medium  tracking-tight leading-4 text-[#777a72]"
                                 title={`Model used: ${message.modelUsed}`}
                               >
                                 Handled by {message.modelUsed}
@@ -2527,8 +2527,7 @@ export default function GeneratorPanel({
 
               <div>
                 <p className="mt-2 flex text-center mx-auto max-w-fit text-[10px] font-semibold text-[#999]">
-                  Long pastes attach as text. Free: 20,000 characters; Pro: no
-                  character limit (64 KB file limit). Review generated data.
+                  AI can make mistakes. Always verify the results.
                 </p>
               </div>
             </form>
