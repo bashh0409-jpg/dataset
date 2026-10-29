@@ -129,22 +129,7 @@ const navigation: {
     comingSoon: true,
     icon: <LayoutGrid aria-hidden="true" className="size-[14px]" />,
   },
-  {
-    id: "schemas",
-    label: "Schemas",
-    icon: (
-      <svg
-        aria-hidden="true"
-        xmlns="http://www.w3.org/2000/svg"
-        height="18px"
-        viewBox="48 -912 864 864"
-        width="18px"
-        fill="#999"
-      >
-        <path d="M192-72v-216h96v-84h-96v-216h96v-60h-96v-216h264v216h-96v60h96v72h96v-72h264v216H552v-72h-96v72h-96v84h96v216H192Zm72-72h120v-72H264v72Zm0-300h120v-72H264v72Zm360 0h120v-72H624v72ZM264-720h120v-72H264v72Zm60-36Zm0 276Zm360 0ZM324-180Z" />
-      </svg>
-    ),
-  },
+  
 
   {
     id: "developer",
@@ -329,6 +314,12 @@ export default function WorkspaceShell({
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
     workspaces[0];
+  const hasPremiumModelAccess =
+    isPro ||
+    activeWorkspace?.hasProAccess === true ||
+    (activeWorkspace?.creditBalance ?? 0) > 0;
+  const effectiveAiModel =
+    hasPremiumModelAccess && aiModel === "qwen" ? "auto" : aiModel;
   const selectedWorkspaceId = activeWorkspace?.id;
   const canDeleteConversations = activeWorkspace?.role === "owner";
   const conversationStorageKey = `synthetic.activeConversationId.${activeWorkspace?.id ?? ""}`;
@@ -1004,8 +995,8 @@ export default function WorkspaceShell({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 mt-2 overflow-y-auto px-[9px] gap-2 max-[640px]:px-[6px]">
-          <div className="flex  items-center  justify-between gap-2 px-[1px]">
+        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden px-[9px] max-[640px]:px-[6px]">
+          <div className="flex shrink-0 items-center justify-between gap-2 px-[1px]">
             {workspaces.length > 1 && (
               <div className="relative" ref={workspacePickerRef}>
                 <button
@@ -1096,7 +1087,10 @@ export default function WorkspaceShell({
             )}
           </div>
 
-          <nav aria-label="Workspace  sections" className="space-y-[2px] mt-4">
+          <nav
+            aria-label="Workspace  sections"
+            className="mt-4 shrink-0 space-y-[2px]"
+          >
             {navigation.map(({ id, label, icon, comingSoon }) => (
               <button
                 aria-current={activeView === id ? "page" : undefined}
@@ -1128,46 +1122,51 @@ export default function WorkspaceShell({
             ))}
           </nav>
 
-          <section aria-label="Saved chats" className="mt-5">
-            <p className="truncate mb-2 text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
+          <section
+            aria-label="Saved chats"
+            className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <p className="mb-2 shrink-0 truncate text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
               Saved Chats
             </p>
             {conversationError && (
               <p
-                className="px-1 py-1 rounded bg-[#ffebee] mb-2  text-[10px] tracking-tight font-medium leading-tight text-[#a64239]"
+                className="mb-2 shrink-0 rounded bg-[#ffebee] px-1 py-1 text-[10px] font-medium leading-tight tracking-tight text-[#a64239]"
                 role="alert"
               >
                 {conversationError}
               </p>
             )}
-            {activeChats.length === 0 ? (
-              <p className="truncate mb-1 text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
-                No saved chats yet
-              </p>
-            ) : (
-              <div className="space-y-[2px]">{activeChats.map(renderChat)}</div>
-            )}
-            {archivedChats.length > 0 && (
-              <div className="mt-3">
-                <button
-                  aria-expanded={archivedChatsOpen}
-                  className="mb-1 flex w-full items-center gap-1 px-1 text-left text-[10px] font-medium uppercase tracking-[0.06em] text-[#969891] hover:text-[#646660] max-[640px]:justify-center"
-                  onClick={() => setArchivedChatsOpen((open) => !open)}
-                  type="button"
-                >
-                  <Archive aria-hidden="true" className="size-3" />
-                  <span className="max-[640px]:sr-only">Archived</span>
-                  <span className="max-[640px]:sr-only">
-                    {archivedChats.length}
-                  </span>
-                </button>
-                {archivedChatsOpen && (
-                  <div className="space-y-[2px]">
-                    {archivedChats.map(renderChat)}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {activeChats.length === 0 ? (
+                <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
+                  No saved chats yet
+                </p>
+              ) : (
+                <div className="space-y-[2px]">{activeChats.map(renderChat)}</div>
+              )}
+              {archivedChats.length > 0 && (
+                <div className="mt-3">
+                  <button
+                    aria-expanded={archivedChatsOpen}
+                    className="mb-1 flex w-full items-center gap-1 px-1 text-left text-[10px] font-medium uppercase tracking-[0.06em] text-[#969891] hover:text-[#646660] max-[640px]:justify-center"
+                    onClick={() => setArchivedChatsOpen((open) => !open)}
+                    type="button"
+                  >
+                    <Archive aria-hidden="true" className="size-3" />
+                    <span className="max-[640px]:sr-only">Archived</span>
+                    <span className="max-[640px]:sr-only">
+                      {archivedChats.length}
+                    </span>
+                  </button>
+                  {archivedChatsOpen && (
+                    <div className="space-y-[2px]">
+                      {archivedChats.map(renderChat)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
@@ -1404,11 +1403,11 @@ export default function WorkspaceShell({
           activeConversation={activeConversation}
           billingStatusError={billingStatusError}
           canInvite={activeWorkspace?.role === "owner"}
-          isPro={activeWorkspace?.hasProAccess ?? isPro}
+          isPro={hasPremiumModelAccess}
           isPersonalPro={isPro}
           workspaceCreditBalance={activeWorkspace?.creditBalance ?? 0}
           workspaceId={activeWorkspace?.id ?? ""}
-          model={aiModel}
+          model={effectiveAiModel}
           onArchiveConversation={() =>
             activeConversation
               ? toggleChatArchived(activeConversation)
@@ -1473,11 +1472,8 @@ export default function WorkspaceShell({
             <GeneratorPanel
               key={newConversationToken}
               workspaceId={activeWorkspace?.id ?? ""}
-              isPro={
-                (activeWorkspace?.hasProAccess ?? isPro) ||
-                (activeWorkspace?.creditBalance ?? 0) > 0
-              }
-              model={aiModel}
+              isPro={hasPremiumModelAccess}
+              model={effectiveAiModel}
               onWorkspaceCreditsChanged={() => router.refresh()}
               onChatSaved={handleChatSaved}
               onConversationOpened={setActiveConversationId}

@@ -163,6 +163,24 @@ describe("AI-generated schema parsing", () => {
     }
   });
 
+  it("parses common type aliases and generic string fields", () => {
+    const result = parseAiSchema(
+      'Here is the proposed schema:\n{"name":"support_tickets","count":2,"fields":[{"name":"id","type":"integer","primaryKey":true},{"name":"created_at","type":"timestamp"},{"name":"description","type":"string"},{"name":"address","type":"varchar"},{"name":"resolved","type":"bool"}]}',
+      42,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables[0].fields).toMatchObject([
+        { name: "id", type: "integer", primaryKey: true },
+        { name: "created_at", type: "date" },
+        { name: "description", type: "text" },
+        { name: "address", type: "address" },
+        { name: "resolved", type: "boolean" },
+      ]);
+    }
+  });
+
   it("parses multiple tables and their primary-key references", () => {
     const result = parseAiSchema(
       JSON.stringify({

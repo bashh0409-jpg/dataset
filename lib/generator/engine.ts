@@ -18,6 +18,8 @@ export const fieldTypes = [
   "date",
   "phone",
   "city",
+  "address",
+  "text",
   "enum",
 ] as const;
 
@@ -74,7 +76,7 @@ export const generatorRequestSchema = z
   });
 
 export type GeneratorRequest = z.infer<typeof generatorRequestSchema>;
-export type GeneratedRecord = Record<string, string | number | boolean>;
+export type GeneratedRecord = Record<string, string | number | boolean | null>;
 
 const dateRange = {
   from: new Date("2000-01-01T00:00:00.000Z"),
@@ -113,6 +115,10 @@ function generateValue(
       return faker.phone.number();
     case "city":
       return faker.location.city();
+    case "address":
+      return faker.location.streetAddress();
+    case "text":
+      return faker.lorem.sentence();
     case "enum":
       return faker.helpers.arrayElement(field.options ?? []);
   }
@@ -128,7 +134,8 @@ export function generateRecords(request: GeneratorRequest): GeneratedRecord[] {
   );
 }
 
-function escapeCsvCell(value: string | number | boolean): string {
+function escapeCsvCell(value: string | number | boolean | null): string {
+  if (value === null) return "";
   let text = String(value);
   if (typeof value === "string" && /^[\t\r\n ]*[=+\-@]/.test(text)) {
     text = `'${text}`;
@@ -148,7 +155,7 @@ export function recordsToCsv(
   return [header, ...rows].join("\r\n");
 }
 
-const relationalFieldSchema = generatorFieldSchema.extend({
+export const relationalGeneratorFieldSchema = generatorFieldSchema.extend({
   primaryKey: z.boolean().optional(),
   references: z
     .object({
@@ -169,7 +176,7 @@ export const relationalGeneratorRequestSchema = z
             .min(1)
             .max(80)
             .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
-          fields: z.array(relationalFieldSchema).min(1).max(25),
+          fields: z.array(relationalGeneratorFieldSchema).min(1).max(25),
         }),
       )
       .min(1)
@@ -227,17 +234,18 @@ export const relationalGeneratorRequestSchema = z
         if (
           !targetTable ||
           !targetField?.primaryKey ||
-          targetField.type !== field.type ||
-          targetTable.name === table.name
+          targetField.type !== field.type
         ) {
           context.addIssue({
             code: "custom",
-            message: `Reference "${table.name}.${field.name}" must target a compatible primary key in another table.`,
+            message: `Reference "${table.name}.${field.name}" must target a compatible primary key in a generated table.`,
             path: ["tables", tableIndex, "fields", fieldIndex, "references"],
           });
           continue;
         }
-        dependencies.get(table.name)?.add(targetTable.name);
+        if (targetTable.name !== table.name) {
+          dependencies.get(table.name)?.add(targetTable.name);
+        }
       }
     }
 
@@ -270,9 +278,12 @@ export const relationalGeneratorRequestSchema = z
 export type RelationalGeneratorRequest = z.infer<
   typeof relationalGeneratorRequestSchema
 >;
+export type RelationalGeneratorField = z.infer<
+  typeof relationalGeneratorFieldSchema
+>;
 export type GeneratedTable = {
   name: string;
-  fields: GeneratorRequest["fields"];
+  fields: RelationalGeneratorField[];
   records: GeneratedRecord[];
   count: number;
   seed: number;
@@ -290,7 +301,9 @@ export function generateRelationalTables(
     const next = [...pending.values()].find((table) =>
       table.fields.every(
         (field) =>
-          !field.references || generated.has(field.references.table),
+          !field.references ||
+          field.references.table === table.name ||
+          generated.has(field.references.table),
       ),
     );
     if (!next) {
@@ -305,6 +318,9 @@ export function generateRelationalTables(
       Object.fromEntries(
         next.fields.map((field) => {
           if (field.references) {
+            if (field.references.table === next.name) {
+              return [field.name, null];
+            }
             const parentRecords = generated.get(field.references.table);
             if (!parentRecords?.length) {
               throw new Error("Referenced table has no generated records.");
@@ -319,15 +335,18 @@ export function generateRelationalTables(
         }),
       ),
     );
+    for (const [rowIndex, record] of records.entries()) {
+      for (const field of next.fields) {
+        if (field.references?.table !== next.name || rowIndex === 0) continue;
+        const parent = faker.helpers.arrayElement(records.slice(0, rowIndex));
+        record[field.name] = parent[field.references.field];
+      }
+    }
 
     generated.set(next.name, records);
     output.push({
       name: next.name,
-      fields: next.fields.map((field) => ({
-        name: field.name,
-        type: field.type,
-        ...(field.options ? { options: field.options } : {}),
-      })),
+      fields: next.fields,
       records,
       count: request.count,
       seed: tableSeed,

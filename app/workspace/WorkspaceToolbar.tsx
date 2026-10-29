@@ -236,7 +236,6 @@ export default function WorkspaceToolbar({
               >
                 {hasPremiumAccess ? (
                   <>
-                    <option value="qwen">Standard</option>
                     <option value="auto">Auto</option>
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>

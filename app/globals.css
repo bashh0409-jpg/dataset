@@ -60,6 +60,27 @@ body {
   transition: left 100ms linear;
 }
 
+.schema-relationship-flow {
+  animation: schema-relationship-flow 0.65s linear infinite;
+}
+
+@keyframes schema-relationship-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schema-relationship-flow,
+  .schema-relationship-traveler {
+    animation: none;
+  }
+
+  .schema-relationship-traveler {
+    display: none;
+  }
+}
+
 .geist {
   font-family: var(--font-geist-sans);
 }

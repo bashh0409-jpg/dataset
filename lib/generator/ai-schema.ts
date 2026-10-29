@@ -36,13 +36,33 @@ const clarificationResponseSchema = z.object({
   status: z.literal("clarification"),
   question: z.string().trim().min(1).max(300),
 });
+const aiFieldTypeSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  const aliases: Record<string, FieldType> = {
+    string: "text",
+    text: "text",
+    varchar: "text",
+    char: "text",
+    number: "integer",
+    int: "integer",
+    numeric: "price",
+    decimal: "price",
+    float: "price",
+    currency: "price",
+    money: "price",
+    bool: "boolean",
+    datetime: "date",
+    timestamp: "date",
+    time: "date",
+    streetaddress: "address",
+    postaladdress: "address",
+  };
+  return aliases[normalized] ?? value;
+}, z.enum(fieldTypes));
 const aiFieldSchema = z.object({
   name: generatorFieldSchema.shape.name,
-  type: z.union([
-    z.enum(fieldTypes),
-    z.literal("string"),
-    z.literal("text"),
-  ]),
+  type: aiFieldTypeSchema,
   options: generatorFieldSchema.shape.options,
   primaryKey: z.boolean().optional(),
   references: z
@@ -129,42 +149,60 @@ function normalizeAiField(
   primaryKey?: boolean;
   references?: { table: string; field: string };
 } {
-  switch (field.type) {
-    case "string":
-    case "text": {
-      const fieldName = field.name.toLowerCase();
-      const inferredType =
-        fieldName === "id_number" || fieldName === "idnumber"
-          ? "idNumber"
-          : fieldName === "name" || fieldName === "full_name"
-            ? "fullName"
-            : fieldName === "email"
-              ? "email"
-              : fieldName === "phone" || fieldName === "phone_number"
-                ? "phone"
-                : null;
+  const fieldName = field.name.toLowerCase();
+  const inferredType =
+    fieldName === "id_number" || fieldName === "idnumber"
+      ? "idNumber"
+      : fieldName === "name" || fieldName === "full_name"
+        ? "fullName"
+        : fieldName === "email"
+          ? "email"
+          : fieldName === "phone" || fieldName === "phone_number"
+            ? "phone"
+            : fieldName === "address" || fieldName.endsWith("_address")
+              ? "address"
+              : null;
+  const type = field.type === "text" ? (inferredType ?? "text") : field.type;
 
-      if (!inferredType) {
-        throw new Error(
-          `The AI used a generic string type for unsupported field "${field.name}".`,
-        );
+  return {
+    name: field.name,
+    type,
+    ...(field.options ? { options: field.options } : {}),
+    ...(field.primaryKey !== undefined
+      ? { primaryKey: field.primaryKey }
+      : {}),
+    ...(field.references ? { references: field.references } : {}),
+  };
+}
+
+function extractJsonObject(content: string) {
+  const text = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    if (start === -1) throw new Error("The AI response did not contain a JSON schema.");
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const character = text[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
       }
-
-      return {
-        ...field,
-        type: inferredType,
-      };
+      if (character === '"') inString = true;
+      else if (character === "{") depth += 1;
+      else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) return JSON.parse(text.slice(start, index + 1));
+      }
     }
-    default:
-      return {
-        name: field.name,
-        type: field.type,
-        ...(field.options ? { options: field.options } : {}),
-        ...(field.primaryKey !== undefined
-          ? { primaryKey: field.primaryKey }
-          : {}),
-        ...(field.references ? { references: field.references } : {}),
-      };
+
+    throw new Error("The AI response contained incomplete JSON.");
   }
 }
 
@@ -173,11 +211,19 @@ export function parseAiSchema(
   seed: number,
   requestedCount?: number,
 ): AiSchemaResult {
-  const json = content
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
-  const result = aiResponseSchema.parse(JSON.parse(json));
+  const rawResponse = extractJsonObject(content);
+  const candidate =
+    typeof rawResponse === "object" && rawResponse !== null
+      ? rawResponse
+      : null;
+  if (
+    candidate &&
+    !("status" in candidate) &&
+    ("tables" in candidate || ("name" in candidate && "fields" in candidate))
+  ) {
+    Object.assign(candidate, { status: "ready" });
+  }
+  const result = aiResponseSchema.parse(candidate);
 
   if (result.status === "clarification") {
     return result;

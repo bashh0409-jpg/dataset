@@ -2,7 +2,12 @@
 
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generatorRequestSchema } from "@/lib/generator/engine";
+import {
+  relationalGeneratorFieldSchema,
+  type RelationalGeneratorField,
+  type GeneratedRecord,
+  generatorRequestSchema,
+} from "@/lib/generator/engine";
 
 const conversationIdSchema = z.uuid();
 const workspaceIdSchema = z.uuid();
@@ -11,17 +16,39 @@ const messagesSchema = z
     z.object({
       role: z.enum(["user", "assistant"]),
       content: z.string().trim().min(1).max(4_000),
+      attachmentName: z.string().trim().min(1).max(120).optional(),
+      attachmentSizeBytes: z.number().int().min(0).max(64_000).optional(),
+      attachmentContents: z.string().max(64_000).optional(),
       generatedArtifactId: z.uuid().optional(),
       generatedArtifactIds: z.array(z.uuid()).max(10).optional(),
+      modelUsed: z.string().trim().min(1).max(120).optional(),
     }),
   )
   .min(1)
   .max(100)
-  .refine(
-    (messages) =>
-      messages.reduce((total, message) => total + message.content.length, 0) <=
-      20_000,
-  );
+  .superRefine((messages, context) => {
+    if (
+      messages.reduce((total, message) => total + message.content.length, 0) >
+      20_000
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Conversation text exceeds the save limit.",
+      });
+    }
+    if (
+      messages.reduce(
+        (total, message) =>
+          total + (message.attachmentContents?.length ?? 0),
+        0,
+      ) > 64_000
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Conversation attachments exceed the save limit.",
+      });
+    }
+  });
 
 const saveInputSchema = z.object({
   id: conversationIdSchema.optional(),
@@ -46,6 +73,14 @@ const renameInputSchema = z.object({
   workspaceId: workspaceIdSchema,
   title: z.string().trim().min(1).max(120),
 });
+const artifactFieldsSchema = z.array(relationalGeneratorFieldSchema).min(1).max(25);
+const storedArtifactFieldsSchema = artifactFieldsSchema;
+const generatedValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
 const conversationMetadataInputSchema = z
   .object({
     id: conversationIdSchema,
@@ -76,12 +111,12 @@ const artifactInputSchema = z
   .object({
     conversationId: conversationIdSchema,
     name: z.string().trim().min(1).max(80),
-    fields: z.array(z.unknown()).min(1).max(25),
+    fields: artifactFieldsSchema,
     records: z
       .array(
         z.record(
           z.string(),
-          z.union([z.string(), z.number(), z.boolean()]),
+          generatedValueSchema,
         ),
       )
       .min(1)
@@ -123,9 +158,9 @@ const artifactInputSchema = z
 const storedArtifactSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(80),
-  fields: z.array(z.unknown()).min(1).max(25),
+  fields: storedArtifactFieldsSchema,
   records: z.array(
-    z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    z.record(z.string(), generatedValueSchema),
   ).max(500),
   count: z.number().int().min(1).max(500),
   seed: z.number().int().min(0).max(2_147_483_647),
@@ -135,8 +170,8 @@ const storedArtifactSchema = z.object({
 export type AiGeneratedArtifact = {
   id: string;
   name: string;
-  fields: z.infer<typeof generatorRequestSchema>["fields"];
-  records: Record<string, string | number | boolean>[];
+  fields: RelationalGeneratorField[];
+  records: GeneratedRecord[];
   count: number;
   seed: number;
   createdAt: string;
@@ -322,7 +357,7 @@ export async function getAiConversation(
     artifacts.push({
       id: artifact.id,
       name: artifact.name,
-      fields: parsedDataset.data.fields,
+      fields: artifact.fields,
       records: artifact.records,
       count: artifact.count,
       seed: artifact.seed,
@@ -360,7 +395,7 @@ export async function saveAiGeneratedArtifact(
       conversation_id: parsedInput.data.conversationId,
       user_id: auth.user.id,
       name: parsedDataset.data.name,
-      fields: parsedDataset.data.fields,
+      fields: parsedInput.data.fields,
       records: parsedInput.data.records,
       count: parsedInput.data.count,
       seed: parsedInput.data.seed,
@@ -384,7 +419,7 @@ export async function saveAiGeneratedArtifact(
     data: {
       id: parsedArtifact.data.id,
       name: parsedArtifact.data.name,
-      fields: parsedDataset.data.fields,
+      fields: parsedInput.data.fields,
       records: parsedArtifact.data.records,
       count: parsedArtifact.data.count,
       seed: parsedArtifact.data.seed,
