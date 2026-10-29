@@ -192,7 +192,7 @@ export default function WorkspaceAccessDialog({
                   className="rounded-md bg-black px-3 py-1 text-[12px] font-semibold text-white transition hover:bg-black/70"
                   type="submit"
                 >
-                  Buy
+                  Refill
                 </button>
               </form>
             )}

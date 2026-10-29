@@ -102,6 +102,16 @@ export default function LegalPage() {
                 third-party marketing.
               </p>
               <p>
+                If you submit a bug report, we store its text and app
+                diagnostics in our database, associated with your account.
+                Images and voice notes you attach are stored in a private
+                Supabase Storage bucket. App diagnostics are included by
+                default, but you can remove them before submitting; they
+                include your browser and device user-agent, current page path
+                (without query parameters), viewport, language, timezone, and
+                collection time.
+              </p>
+              <p>
                 With your consent, this site may load Vercel Analytics and Speed
                 Insights to understand site performance and usage patterns.
                 These services may process technical information about your

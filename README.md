@@ -20,6 +20,24 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## k6 smoke test
+
+With the app running locally, run a small public-route smoke test:
+
+```bash
+npm run test:load:smoke
+```
+
+The test uses one virtual user for three iterations and checks the landing, terms, and privacy pages. To target another environment, set `BASE_URL` explicitly (for example, `BASE_URL=https://staging.example.com npm run test:load:smoke`). This is a smoke test, not a capacity or stress test.
+
+To smoke-test the protected workspace and API route guards:
+
+```bash
+npm run test:load:workspace
+```
+
+By default this verifies that `/workspace` redirects signed-out visitors, including Next.js streamed redirects, and that billing and webhook routes reject unauthenticated or invalid requests without creating checkouts or webhook events. Expected auth/validation error statuses are treated as normal responses, while route-specific checks still fail on unexpected statuses. To also verify a signed-in workspace page, set `AUTH_COOKIE` to the browser's current cookie header for a dedicated test account; the cookie is used only for the workspace page request. Never use a production session cookie. The current app has no public `/api/v1` data-generation endpoint, so this test does not exercise a generation API or trigger AI usage.
+
 ## OAuth sign-in
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment. Enable Google and GitHub under Supabase Authentication providers. Email sign-in uses Supabase's default magic-link templates and does not require template customization.
@@ -45,6 +63,8 @@ The local Supabase project also exposes the anon/service-role keys in the termin
 
 After OAuth sign-in, new users complete onboarding by adding their name and creating a workspace. They can send a single-use workspace invitation by email; the invitation expires after seven days and can only be accepted by the invited email address. Workspace members can post short messages while mentioning one or more teammates; all members can see the shared feed, and mentioned users see unread counts until they open it.
 
+Signed-in workspace users can submit bug reports with one combined problem/steps/expected-result description, up to five images, and an optional voice note (up to 90 seconds). Cloudflare Turnstile runs invisibly when a report is submitted and is verified on the server; Cloudflare may still present a challenge when needed. Create a Turnstile widget in Cloudflare, allow the app's production hostname (and `localhost` for development), and set its site key as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and secret as the server-only `TURNSTILE_SECRET_KEY`. Attachments are stored in a private Supabase Storage bucket. Browser/device and page diagnostics are included by default and can be removed before sending. Apply `20261029000000_create_bug_reports.sql`, `20261029001000_add_bug_report_attachments.sql`, and `20261029002000_harden_bug_reports.sql` to enable submissions, private attachment uploads, and abuse limits. Each user may submit up to five reports per hour and upload up to 30 attachments / 100 MiB per rolling 24 hours.
+
 ## Data generator
 
 Agent mode can infer and generate up to 10 related tables from SQL `CREATE TABLE` definitions, including declared foreign keys. Supported uploaded SQL schemas are parsed locally to avoid an AI round trip; other code and schema formats continue through AI schema inference. All tables use the requested row count (up to 2,000 total rows per request); select a table in the Data panel to preview or export its records. The `idNumber` field type creates clearly synthetic `TEST-` prefixed values, not valid government identifiers. SQL is treated as schema text only and is never executed.
@@ -58,7 +78,7 @@ The **Go Pro** button in the workspace toolbar starts a Polar subscription check
 To enable Pro:
 
 1. Apply the conversation migrations, including `20261026210000_create_ai_generated_artifacts.sql`, `20261027230000_share_conversations_with_workspace.sql`, and `20261027233000_add_workspace_ai_credits.sql`, to enable workspace-shared chats, generated-data previews, and workspace credits.
-2. Apply `20261026180000_add_pro_subscriptions_and_ai_credentials.sql` after the existing migrations, then apply `20261026203000_create_pro_ai_provider_balancing.sql` for balanced Auto routing, `20261026204000_add_pro_ai_rolling_limit.sql` for Pro request tracking, `20261026224000_add_polar_billing_idempotency.sql` for subscription checkout and webhook idempotency, `20261026225000_harden_pro_ai_provider_rpcs.sql` to restrict provider-balancing RPCs to trusted server code, `20261026230000_add_free_ai_rolling_limit.sql` for the rolling Free model cap, `20261027230000_share_conversations_with_workspace.sql` for shared conversations, `20261027233000_add_workspace_ai_credits.sql` for workspace credits, `20261028003000_workspace_pro_access_and_allowances.sql` for owner-funded workspace Pro access and per-member allowances, `20261028004000_workspace_credits_unlock_premium_models.sql` to allow credits to unlock premium requests, `20261028005000_charge_workspace_credits_for_premium_requests.sql` to charge an available workspace credit for each premium request, `20261028006000_charge_workspace_credits_for_standard_requests.sql` to charge available credits for Standard/Free generation too, and `20261028007000_add_workspace_mentions.sql` for shared workspace mentions.
+2. Apply `20261026180000_add_pro_subscriptions_and_ai_credentials.sql` after the existing migrations, then apply `20261026203000_create_pro_ai_provider_balancing.sql` for balanced Auto routing, `20261026204000_add_pro_ai_rolling_limit.sql` for Pro request tracking, `20261026224000_add_polar_billing_idempotency.sql` for subscription checkout and webhook idempotency, `20261026225000_harden_pro_ai_provider_rpcs.sql` to restrict provider-balancing RPCs to trusted server code, `20261026230000_add_free_ai_rolling_limit.sql` for the rolling Free model cap, `20261027230000_share_conversations_with_workspace.sql` for shared conversations, `20261027233000_add_workspace_ai_credits.sql` for workspace credits, `20261028003000_workspace_pro_access_and_allowances.sql` for owner-funded workspace Pro access and per-member allowances, `20261028004000_workspace_credits_unlock_premium_models.sql` to allow credits to unlock premium requests, `20261028005000_charge_workspace_credits_for_premium_requests.sql` to charge an available workspace credit for each premium request, `20261028006000_charge_workspace_credits_for_standard_requests.sql` to charge available credits for Standard/Free generation too, `20261028007000_add_workspace_mentions.sql` for shared workspace mentions, `20261028183000_prevent_self_workspace_mentions.sql` to prevent self-mentions, and `20261028203000_add_workspace_member_avatars.sql` to return workspace member avatar URLs.
 3. Create a monthly Pro product in Polar and configure its product ID as `POLAR_PRO_PRODUCT_ID`. Create a separate one-time product for a single 500-credit workspace top-up and configure it as `POLAR_WORKSPACE_CREDITS_PRODUCT_ID`. Create an organization access token and webhook secret.
 4. Register `https://<your-app-host>/api/webhooks/polar` in Polar for subscription created, updated, active, canceled, cycled, past-due, paused, resumed, revoked, and uncanceled events, as well as `order.paid` for workspace credit purchases.
 5. Set `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_PRO_PRODUCT_ID`, `POLAR_WORKSPACE_CREDITS_PRODUCT_ID`, `POLAR_ENVIRONMENT` (`sandbox` while testing, `production` for live billing), and `NEXT_PUBLIC_SITE_URL`.

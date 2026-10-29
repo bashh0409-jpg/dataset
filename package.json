@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:load:smoke": "k6 run tests/k6/public-smoke.js",
+    "test:load:workspace": "k6 run tests/k6/workspace-api-smoke.js",
     "supabase": "supabase"
   },
   "dependencies": {

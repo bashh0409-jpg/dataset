@@ -9,6 +9,7 @@ const workspaceMembersSchema = z.array(
     member_id: z.uuid(),
     member_name: z.string().nullable(),
     member_email: z.string().nullable(),
+    member_avatar_url: z.string().nullable(),
     member_role: z.enum(["owner", "member"]),
     member_joined_at: z.iso.datetime({ offset: true }),
   }),
@@ -18,6 +19,7 @@ export type WorkspaceMember = {
   id: string;
   name: string | null;
   email: string | null;
+  avatarUrl: string | null;
   role: "owner" | "member";
   joinedAt: string;
   isCurrentUser: boolean;
@@ -58,11 +60,29 @@ export async function getWorkspaceMembers(
     return { error: "Workspace members returned an unexpected response." };
   }
 
+  const trustedAvatarUrl = (value: string | null) => {
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      if (
+        url.protocol === "https:" &&
+        (url.hostname === "avatars.githubusercontent.com" ||
+          url.hostname.endsWith(".googleusercontent.com"))
+      ) {
+        return url.toString();
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
   return {
     data: parsedMembers.data.map((member) => ({
       id: member.member_id,
       name: member.member_name,
       email: member.member_email,
+      avatarUrl: trustedAvatarUrl(member.member_avatar_url),
       role: member.member_role,
       joinedAt: member.member_joined_at,
       isCurrentUser: member.member_id === user.id,

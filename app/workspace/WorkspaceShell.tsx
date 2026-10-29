@@ -33,13 +33,12 @@ import {
 } from "@/app/actions/ai-conversations";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import DeveloperPanel, { type ApiKeySummary } from "./DeveloperPanel";
+import BugReportDialog from "./BugReportDialog";
 import GeneratorPanel from "./GeneratorPanel";
 import WorkspaceMentions from "./WorkspaceMentions";
 import WorkspaceAccessDialog from "./WorkspaceAccessDialog";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 
-const Button =
-  "w-full rounded-lg flex font-medium tracking-tight cursor-pointer items-center gap-2 px-2 py-1.5 text-left text-[12px] text-[#686a64] transition hover:bg-[#f4f5f1] disabled:opacity-50";
 const conversationColorClasses: Record<
   Exclude<AiConversationSummary["color"], null>,
   string
@@ -190,6 +189,7 @@ export default function WorkspaceShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceMenuPosition, setWorkspaceMenuPosition] = useState<{
     left: number;
@@ -203,6 +203,7 @@ export default function WorkspaceShell({
   >(null);
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const closeBugReport = useCallback(() => setBugReportOpen(false), []);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(
     workspaces[0]?.id ?? "",
   );
@@ -228,6 +229,17 @@ export default function WorkspaceShell({
   const conversationListRequestsRef = useRef(
     new Map<string, ReturnType<typeof listAiConversations>>(),
   );
+
+  useEffect(() => {
+    if (!accountOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [accountOpen]);
 
   useEffect(() => {
     if (!workspaceMenuOpen) return;
@@ -290,7 +302,10 @@ export default function WorkspaceShell({
         return;
       }
       const workspaceId = url.searchParams.get("workspace_id");
-      if (workspaceId && workspaces.some((workspace) => workspace.id === workspaceId)) {
+      if (
+        workspaceId &&
+        workspaces.some((workspace) => workspace.id === workspaceId)
+      ) {
         setActiveWorkspaceId(workspaceId);
       }
       setCreditPurchaseStatus(purchaseStatus);
@@ -519,7 +534,9 @@ export default function WorkspaceShell({
 
   const removeChat = async (chat: AiConversationSummary) => {
     if (!canDeleteConversations) {
-      setConversationError("Only the workspace owner can delete conversations.");
+      setConversationError(
+        "Only the workspace owner can delete conversations.",
+      );
       return;
     }
     if (
@@ -665,11 +682,13 @@ export default function WorkspaceShell({
       );
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${result.data.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 80) || "conversation"}.json`;
+      anchor.download = `${
+        result.data.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 80) || "conversation"
+      }.json`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -1018,7 +1037,6 @@ export default function WorkspaceShell({
                       role="dialog"
                       style={workspaceMenuPosition}
                     >
-                      
                       <header className="flex py-0.5 px-2 shrink-0 items-center justify-between border-b border-[#e7e8e4]">
                         <h2 className="text-[13px]  font-semibold tracking-tight text-[#60625d]">
                           Workspaces
@@ -1026,11 +1044,11 @@ export default function WorkspaceShell({
                         <div className="flex items-center capitalize tracking-tight gap-1">
                           {" "}
                           <span className="text-[12px] font-semibold text-[#686a64]">
-                             {workspaces.length}{" "}
-                          {workspaces.length === 1 ? "workspace" : "workspaces"}
+                            {workspaces.length}{" "}
+                            {workspaces.length === 1
+                              ? "workspace"
+                              : "workspaces"}
                           </span>
-                         
-                          
                         </div>
                       </header>
                       <div className="max-h-[min(60vh,360px)] font-semibold overflow-y-auto p-1">
@@ -1058,7 +1076,6 @@ export default function WorkspaceShell({
                                   viewBox="0 -960 960 960"
                                   width="16px"
                                   fill="currentColor"
-                                  
                                 >
                                   <path d="M0-160v-80h160v-40q-33 0-56.5-23.5T80-360v-400q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v400q0 33-23.5 56.5T800-280v40h160v80H0Zm160-200h640v-400H160v400Zm0 0v-400 400Z" />
                                 </svg>
@@ -1154,62 +1171,190 @@ export default function WorkspaceShell({
           </section>
         </div>
 
-        <footer className="shrink-0 border-t border-[#e9ebe6]">
-          <div className="relative border-t border-[#eef0eb] px-[8px] py-2">
-            {accountOpen && (
-              <div className="absolute p-1 bottom-[calc(100%+6px)] left-2 right-2 z-10 rounded-xl border border-[#e7e8e4] bg-white shadow-[0_4px_16px_rgba(20,24,18,0.08)]">
-                {signOutError && (
-                  <p className=" text-[11px] text-[#b44238]" role="alert">
-                    {signOutError}
-                  </p>
-                )}
+        <div className="p-2 leading-tight font-semibold hidden text-xs" >New notification about the application changes will appear here</div>
 
-                <button className={Button} type="button">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    height="18px"
-                    viewBox="48 -912 864 864"
-                    width="18px"
-                    fill="currentColor"
-                  >
-                    <path d="M378-474q-42-42-42-102v-138q0-22.5 15.75-38.25T390-768q13.8 0 26.22 7 12.42 7 19.78 20 8-11 19-18t25-7q14 0 25.5 7t19.5 19q8-12 19.5-19t25.38-7q23.12 0 38.62 15.75Q624-734.5 624-712v136q0 60-42 102t-102 42q-60 0-102-42Zm153-51.15q21-21.15 21-50.85v-96H408v96q0 29.7 21.21 50.85 21.21 21.15 51 21.15T531-525.15ZM192-144v-96q0-24 13-45t34-33q55-32 116-49t125-17q64 0 125 17t116 49q21 12 34 33t13 45v96H192Zm72-72h432v-24q0-4.93-3-8.97-3-4.03-8-7.03-47-29-99-42.5T480-312q-54 0-106 13.5T275-256q-5 3-8 7.03-3 4.04-3 8.97v24Zm216 0Zm0-456Z" />
-                  </svg>
-                  Account settings
-                </button>
-                <button className={Button} type="button">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    height="18px"
-                    viewBox="48 -912 864 864"
-                    width="18px"
-                    fill="currentColor"
-                  >
-                    <path d="M360-240q-29.7 0-50.85-21.15Q288-282.3 288-312v-480q0-29.7 21.15-50.85Q330.3-864 360-864h384q29.7 0 50.85 21.15Q816-821.7 816-792v480q0 29.7-21.15 50.85Q773.7-240 744-240H360Zm0-72h384v-480H360v480ZM216-96q-29.7 0-50.85-21.15Q144-138.3 144-168v-552h72v552h456v72H216Zm144-216v-480 480Z" />
-                  </svg>{" "}
-                  Documentation
-                </button>
-                <div className="p-1 border-y hidden border-[#686a64]"></div>
-                <button
-                  className={Button}
-                  disabled={signingOut}
-                  onClick={signOut}
-                  type="button"
+        <footer className="shrink-0  border-t border-[#e9ebe6]">
+          <div className="relative border-t border-[#eef0eb] px-[8px] py-2">
+            {accountOpen &&
+              createPortal(
+                <div
+                  className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 px-4 py-8 backdrop-blur-[2px]"
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                      setAccountOpen(false);
+                    }
+                  }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    height="18px"
-                    viewBox="48 -912 864 864"
-                    width="18px"
-                    fill="currentColor"
+                  <section
+                    aria-labelledby="account-dialog-title"
+                    aria-modal="true"
+                    className="w-full max-w-sm rounded-3xl bg-white px-2 pt-4 pb-3 text-[#111827] shadow-xl"
+                    id="account-dialog"
+                    role="dialog"
                   >
-                    <path d="M216-144q-29.7 0-50.85-21.15Q144-186.3 144-216v-528q0-29.7 21.15-50.85Q186.3-816 216-816h264v72H216v528h264v72H216Zm432-168-51-51 81-81H384v-72h294l-81-81 51-51 168 168-168 168Z" />
-                  </svg>
-                  {signingOut ? "Signing out..." : "Sign out"}
-                </button>
-              </div>
+                    <header className="flex items-start px-2 justify-between gap-4 border-b border-[#e7e8e4] pb-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e7e9e3] text-sm font-semibold text-[#686a64]">
+                          {avatarUrl && !avatarFailed ? (
+                            <Image
+                              alt=""
+                              className="object-cover"
+                              fill
+                              onError={() => setAvatarFailed(true)}
+                              sizes="40px"
+                              src={avatarUrl}
+                            />
+                          ) : (
+                            (displayName || email || "A")
+                              .charAt(0)
+                              .toUpperCase()
+                          )}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
+                            {displayName || email}
+                          </p>
+                          <p className="truncate text-sm font-medium leading-4 tracking-tight text-[#999]"></p>
+                          {displayName && (
+                            <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
+                              {email}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        aria-label="Close account menu"
+                        autoFocus
+                        className="flex size-7 shrink-0 items-center justify-center rounded-full text-[#686a64] transition hover:bg-[#f1f2ee] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                        onClick={() => setAccountOpen(false)}
+                        type="button"
+                      >
+                        <X aria-hidden="true" className="size-4" />
+                      </button>
+                    </header>
+                    <div className="mt-2">
+                      {signOutError && (
+                        <p
+                          role="alert"
+                          className="geist mb-1 rounded px-2 py-1  bg-[#fff1f0] text-left text-sm font-medium leading-4 tracking-tight text-[#999]"
+                        >
+                          {signOutError}
+                        </p>
+                      )}
+
+                      <button
+                        disabled={signingOut}
+                        onClick={signOut}
+                        type="button"
+                        className="flex w-full  jusify-between items-center gap-3 py-2 px-2 rounded hover:bg-black/5"
+                      >
+                        <div className="min-w-0  flex flex-row items-cente gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            height="18px"
+                            viewBox="0 -960 960 960"
+                            width="18px"
+                            fill="currentColor"
+                            className="rotate-180"
+                          >
+                            <path d="M200-120q-33 0-56.5-23.5T120-200v-160h80v160h560v-560H200v160h-80v-160q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm220-160-56-58 102-102H120v-80h346L364-622l56-58 200 200-200 200Z" />
+                          </svg>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
+                              {signingOut ? "Signing out..." : "Sign out"}
+                            </p>
+
+                            <p className="geist hidden text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
+                              You will be signed out
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-3 rounded px-2 py-2 hover:bg-black/5"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          setBugReportOpen(true);
+                        }}
+                        type="button"
+                      >
+                        <div className="min-w-0  flex flex-row items-cente gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            height="18px"
+                            viewBox="0 -960 960 960"
+                            width="18px"
+                            fill="currentColor"
+                          >
+                            <path d="M480-200q66 0 113-47t47-113v-160q0-66-47-113t-113-47q-66 0-113 47t-47 113v160q0 66 47 113t113 47Zm-80-120h160v-80H400v80Zm0-160h160v-80H400v80Zm80 40Zm0 320q-65 0-120.5-32T272-240H160v-80h84q-3-20-3.5-40t-.5-40h-80v-80h80q0-20 .5-40t3.5-40h-84v-80h112q14-23 31.5-43t40.5-35l-64-66 56-56 86 86q28-9 57-9t57 9l88-86 56 56-66 66q23 15 41.5 34.5T688-640h112v80h-84q3 20 3.5 40t.5 40h80v80h-80q0 20-.5 40t-3.5 40h84v80H688q-32 56-87.5 88T480-120Z" />
+                          </svg>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
+                              Report bug
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <button className="flex w-full  jusify-between items-center gap-3 py-2 px-2 rounded hover:bg-black/5">
+                        <div className="min-w-0  flex flex-row items-cente gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            height="18px"
+                            viewBox="0 -960 960 960"
+                            width="18px"
+                            fill="currentColor"
+                          >
+                            <path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z" />
+                          </svg>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
+                              Documentation
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <button className="flex w-full  jusify-between items-center gap-3 py-2 px-2 rounded hover:bg-black/5">
+                        <div className="min-w-0  flex flex-row items-cente gap-2">
+                          <span className="relative flex size-[20px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e7e9e3] text-[10px] font-semibold text-[#686a64]">
+                            {avatarUrl && !avatarFailed ? (
+                              <Image
+                                alt=""
+                                className="object-cover"
+                                fill
+                                onError={() => setAvatarFailed(true)}
+                                sizes="20px"
+                                src={avatarUrl}
+                              />
+                            ) : (
+                              (displayName || email || "A")
+                                .charAt(0)
+                                .toUpperCase()
+                            )}
+                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="geist text-left text-sm font-medium leading-4 tracking-tight ">
+                              Personal settings
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </section>
+                </div>,
+                document.body,
+              )}
+            {bugReportOpen && (
+              <BugReportDialog onClose={closeBugReport} />
             )}
             <button
               aria-expanded={accountOpen}
+              aria-controls="account-dialog"
+              aria-haspopup="dialog"
               aria-label="Account menu"
               className="flex  w-full min-w-0 items-center gap-[7px] py-0.5 rounded-lg px-1 pr-3 text-left transition hover:bg-[#f1f2ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#858780]"
               onClick={() => setAccountOpen((open) => !open)}

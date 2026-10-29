@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import {
   AtSign,
   Check,
+  X,
   LoaderCircle,
   MailOpen,
   MoreVertical,
@@ -36,7 +38,10 @@ export default function WorkspaceMentions({
 }: WorkspaceMentionsProps) {
   const [open, setOpen] = useState(false);
   const [mentions, setMentions] = useState<WorkspaceMention[]>([]);
+  const [selectedMention, setSelectedMention] =
+    useState<WorkspaceMention | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [failedAvatarIds, setFailedAvatarIds] = useState<string[]>([]);
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -48,10 +53,15 @@ export default function WorkspaceMentions({
   const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const mentionsPanelRef = useRef<HTMLElement>(null);
+  const mentionDetailRef = useRef<HTMLElement>(null);
   const actionsButtonRef = useRef<HTMLButtonElement>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [mentionDetailPosition, setMentionDetailPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
@@ -138,6 +148,7 @@ export default function WorkspaceMentions({
   const openMentions = async () => {
     setOpen(true);
     setActionsOpen(false);
+    setSelectedMention(null);
     setComposerOpen(false);
     setError("");
     setLoading(true);
@@ -174,16 +185,22 @@ export default function WorkspaceMentions({
       const target = event.target as Node;
       if (
         !containerRef.current?.contains(target) &&
-        !actionsMenuRef.current?.contains(target)
+        !actionsMenuRef.current?.contains(target) &&
+        !mentionDetailRef.current?.contains(target)
       ) {
         setOpen(false);
         setActionsOpen(false);
+        setSelectedMention(null);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
-        setActionsOpen(false);
+        if (selectedMention) {
+          setSelectedMention(null);
+        } else {
+          setOpen(false);
+          setActionsOpen(false);
+        }
       }
     };
     document.addEventListener("pointerdown", closeOnOutsideClick);
@@ -192,7 +209,7 @@ export default function WorkspaceMentions({
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open]);
+  }, [open, selectedMention]);
 
   const submitMention = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -251,7 +268,42 @@ export default function WorkspaceMentions({
     const member = members.find((candidate) => candidate.id === memberId);
     return member?.name || member?.email || "Workspace member";
   };
+  const memberAvatar = (memberId: string) => {
+    const member = members.find((candidate) => candidate.id === memberId);
+    if (member?.avatarUrl && !failedAvatarIds.includes(memberId)) {
+      return member.avatarUrl;
+    }
+
+    const stableHash = [...memberId].reduce(
+      (hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0,
+      0,
+    );
+    return ["/pp.png", "/pp2.png", "/pp3.png"][stableHash % 3];
+  };
+  const mentionSummary = (mention: WorkspaceMention) => {
+    const recipientNames = mention.recipientIds.map(memberName).join(", ");
+    const authoredByCurrentUser = members.some(
+      (member) => member.id === mention.authorId && member.isCurrentUser,
+    );
+
+    if (authoredByCurrentUser) return `You mentioned ${recipientNames}`;
+    if (mention.isMentioned) {
+      return `${memberName(mention.authorId)} mentioned you`;
+    }
+    return `${memberName(mention.authorId)} mentioned ${recipientNames}`;
+  };
   const mentionableMembers = members.filter((member) => !member.isCurrentUser);
+
+  const openMentionDetail = (mention: WorkspaceMention) => {
+    const bounds = mentionsPanelRef.current?.getBoundingClientRect();
+    if (bounds) {
+      setMentionDetailPosition({
+        left: Math.max(8, Math.min(bounds.right + 8, window.innerWidth - 268)),
+        top: Math.max(8, Math.min(bounds.top, window.innerHeight - 300)),
+      });
+    }
+    setSelectedMention(mention);
+  };
 
   return (
     <div className="relative" ref={containerRef}>
@@ -269,6 +321,7 @@ export default function WorkspaceMentions({
           if (open) {
             setOpen(false);
             setActionsOpen(false);
+            setSelectedMention(null);
           } else void openMentions();
         }}
         type="button"
@@ -357,17 +410,35 @@ export default function WorkspaceMentions({
               <ul className="space-y-0.5">
                 {mentions.map((mention) => (
                   <li
-                    className={`rounded-md px-2 py-2 ${
+                    className={`rounded-md ${
                       mention.isMentioned && !mention.readAt
                         ? "bg-[#f0f3eb]"
                         : "hover:bg-[#f4f5f1]"
                     }`}
                     key={mention.id}
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#e8ebe4] text-[10px] font-semibold text-[#50534b]">
-                        {memberName(mention.authorId).charAt(0).toUpperCase()}
-                      </span>
+                    <button
+                      aria-label={`Open message from ${memberName(mention.authorId)}`}
+                      className="flex w-full cursor-pointer items-start gap-3 px-2 py-2 text-left"
+                      onClick={() => openMentionDetail(mention)}
+                      type="button"
+                    >
+                      <Image
+                        alt=""
+                        aria-hidden="true"
+                        className="size-7 shrink-0 rounded-full object-cover"
+                        height={28}
+                        onError={() =>
+                          setFailedAvatarIds((current) =>
+                            current.includes(mention.authorId)
+                              ? current
+                              : [...current, mention.authorId],
+                          )
+                        }
+                        src={memberAvatar(mention.authorId)}
+                        unoptimized
+                        width={28}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                           <span className="text-xs font-semibold">
@@ -391,7 +462,7 @@ export default function WorkspaceMentions({
                           {mention.recipientIds.map(memberName).join(", ")}
                         </p>
                       </div>
-                    </div>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -424,7 +495,7 @@ export default function WorkspaceMentions({
                 </legend>
                 <div className="mb-2 flex max-h-20 flex-wrap gap-1 overflow-y-auto">
                   {mentionableMembers.length === 0 ? (
-                    <p className="text-[11px] text-[#868880]">
+                    <p className="text-[11px] font-medium tracking-tight text-[#868880]">
                       No other workspace members to mention.
                     </p>
                   ) : (
@@ -506,6 +577,58 @@ export default function WorkspaceMentions({
           ) : null}
         </section>
       )}
+      {open &&
+        selectedMention &&
+        mentionDetailPosition &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <section
+            aria-label="Mention message details"
+            aria-modal="false"
+            className="fixed z-[100] flex max-h-[min(78vh,360px)] w-[min(252px,calc(100vw-16px))] flex-col overflow-hidden rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
+            ref={mentionDetailRef}
+            role="dialog"
+            style={mentionDetailPosition}
+          >
+            <header className="flex py-0.5 shrink-0 items-center justify-between border-b border-[#e7e8e4] px-2">
+              <h2 className="min-w-0 truncate text-[12px] font-semibold tracking-tight text-[#60625d]">
+                {mentionSummary(selectedMention)}
+              </h2>
+              <div className="flex items-center tracking-tight gap-1">
+                <div className="relative">
+                  <button
+                    aria-label="Close message details"
+                    className="flex size-6 items-center justify-center rounded-md text-[#686a64] transition hover:bg-[#eff0ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                    onClick={() => setSelectedMention(null)}
+                    type="button"
+                  >
+                    <X aria-hidden="true" className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            </header>
+            <div className="min-h-0 font-semibold tracking-tight overflow-y-auto px-3 py-1">
+              <time
+                className=" block text-[10px] text-[#868880]"
+                dateTime={selectedMention.createdAt}
+              >
+                {formatMentionDate(selectedMention.createdAt)}
+              </time>
+              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-[#4c4e48]">
+                {selectedMention.message}
+              </p>
+              <div className="mt-4 border-t hidden border-[#e7e8e4] pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#868880]">
+                  Mentioned
+                </p>
+                <p className="mt-1 break-words text-xs text-[#555850]">
+                  {selectedMention.recipientIds.map(memberName).join(", ")}
+                </p>
+              </div>
+            </div>
+          </section>,
+          document.body,
+        )}
       {open &&
         actionsOpen &&
         actionsMenuPosition &&
