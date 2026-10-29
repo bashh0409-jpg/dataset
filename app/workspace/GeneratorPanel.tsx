@@ -20,6 +20,8 @@ import {
   Table2,
   ZoomIn,
   ZoomOut,
+  Key,
+  KeyRound,
 } from "lucide-react";
 import {
   useCallback,
@@ -3064,7 +3066,7 @@ export default function GeneratorPanel({
                               }}
                             >
                               <header
-                                className={`flex touch-none items-center gap-2 border-b border-[#e5e9e3] bg-[#f7f9f5] px-2.5 py-2 ${
+                                className={`flex touch-none items-center gap-2 border-b border-[#e5e9e3] bg-[#f7f9f5] px-2.5 py-1 ${
                                   draggingSchemaTable === table.name
                                     ? "cursor-grabbing"
                                     : "cursor-grab"
@@ -3133,21 +3135,22 @@ export default function GeneratorPanel({
                                     y,
                                   };
                                   if (
-                                    schemaTablePositionFrameRef.current ===
-                                    null
+                                    schemaTablePositionFrameRef.current === null
                                   ) {
                                     schemaTablePositionFrameRef.current =
                                       window.requestAnimationFrame(() => {
                                         const update =
                                           schemaTablePositionUpdateRef.current;
                                         if (update) {
-                                          setSchemaTablePositions((positions) => ({
-                                            ...positions,
-                                            [update.tableName]: {
-                                              x: update.x,
-                                              y: update.y,
-                                            },
-                                          }));
+                                          setSchemaTablePositions(
+                                            (positions) => ({
+                                              ...positions,
+                                              [update.tableName]: {
+                                                x: update.x,
+                                                y: update.y,
+                                              },
+                                            }),
+                                          );
                                         }
                                         schemaTablePositionFrameRef.current =
                                           null;
@@ -3198,7 +3201,7 @@ export default function GeneratorPanel({
                                         className="shrink-0 rounded bg-[#eef4e9] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#536346]"
                                         title="Primary key"
                                       >
-                                        PK
+                                        <KeyRound className="size-3" />
                                       </span>
                                     )}
                                     {field.references && (

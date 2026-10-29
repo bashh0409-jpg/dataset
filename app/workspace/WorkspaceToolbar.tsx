@@ -511,10 +511,19 @@ export default function WorkspaceToolbar({
         ) : isPro ? (
           <span
             aria-label="This workspace has Pro access"
-            className="flex h-7 items-center rounded-lg border border-[#d8e5d2] bg-[#f2f8ef] px-2 text-xs font-semibold tracking-tight text-[#47623f]"
+            className="flex  p-0.5 items-center gap-1 rounded border border-[#d8e5d2] bg-[#f2f8ef] text-xs font-semibold tracking-tight text-[#47623f]"
             title="Pro models are included through this workspace"
           >
-            Workspace Pro
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="16px"
+              viewBox="48 -912 864 864"
+              width="16px"
+              fill="currentColor"
+            >
+              <path d="M240-192q-60 0-102-42T96-336v-288q0-60 42-102t102-42h480q60 0 102 42t42 102v288q0 60-42 102t-102 42H240Zm0-432h480q19 0 37 5.5t35 14.5v-20q0-30-21-51t-51-21H240q-30 0-51 21t-21 51v20q17-10 35-15t37-5Zm-63 110 430 105q8 2 16 0t15-7l135-112q-11-11-24.5-17.5T720-552H240q-20 0-38 11t-25 27Z" />
+            </svg>
+            {workspaceCreditBalance}
           </span>
         ) : workspaceCreditBalance > 0 ? (
           <button
