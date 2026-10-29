@@ -46,9 +46,39 @@ export async function submitBugReport(
 ): Promise<{ success: true } | { error: string }> {
   const parsed = bugReportSchema.safeParse(input);
   if (!parsed.success) {
+    const invalidFields = [
+      ...new Set(parsed.error.issues.map((issue) => issue.path[0])),
+    ];
+    console.warn("Bug report rejected because fields failed validation.", {
+      fields: invalidFields,
+      issueCodes: parsed.error.issues.map((issue) => issue.code),
+    });
+
+    if (invalidFields.includes("description")) {
+      return {
+        error: "Describe the issue in at least 10 characters before sending.",
+      };
+    }
+    if (invalidFields.includes("attachmentPaths")) {
+      return {
+        error:
+          "An attachment is too large, unsupported, or invalid. Remove it and try again.",
+      };
+    }
+    if (invalidFields.includes("diagnostics")) {
+      return {
+        error:
+          "The diagnostic information is invalid. Turn off App Diagnostics and try again.",
+      };
+    }
+    if (invalidFields.includes("turnstileToken")) {
+      return {
+        error: "Security verification expired. Please try the check again.",
+      };
+    }
+
     return {
-      error:
-        "Check the report description and attached files, then try again.",
+      error: "Some report details are invalid. Review them and try again.",
     };
   }
 

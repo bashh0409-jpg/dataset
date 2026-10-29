@@ -36,6 +36,30 @@ body {
   font-family:  var(--font-geist-sans),var(--font-helvetica-now), sans-serif;
 }
 
+.voice-note-waveform-bar {
+  width: 2px;
+  flex: 0 0 2px;
+  border-radius: 999px;
+  background: #999;
+  transition: background-color 150ms ease;
+}
+
+.voice-note-waveform-bar.is-played {
+  background: #3e4239;
+}
+
+.voice-note-waveform-playhead {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  width: 2px;
+  border-radius: 999px;
+  background: #92cb01;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: left 100ms linear;
+}
+
 .geist {
   font-family: var(--font-geist-sans);
 }
