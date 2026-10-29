@@ -1470,7 +1470,7 @@ export default function WorkspaceShell({
         ) : activeView === "generate" ? (
           <div className="absolute inset-0 min-h-0 overflow-hidden">
             <GeneratorPanel
-              key={newConversationToken}
+              key={`${newConversationToken}:${requestedConversationId ?? "new"}`}
               workspaceId={activeWorkspace?.id ?? ""}
               isPro={hasPremiumModelAccess}
               model={effectiveAiModel}

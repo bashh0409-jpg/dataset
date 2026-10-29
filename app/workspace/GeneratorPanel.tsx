@@ -1585,26 +1585,6 @@ export default function GeneratorPanel({
           content: removeProviderFallbackNotice(message.content),
         }));
         setConversation(messages);
-        const pendingTextAttachment = [...messages]
-          .reverse()
-          .find(
-            (message) =>
-              message.role === "user" &&
-              message.attachmentName &&
-              message.attachmentContents,
-          );
-        setTextAttachment(
-          pendingTextAttachment?.attachmentName &&
-            pendingTextAttachment.attachmentContents
-            ? {
-                name: pendingTextAttachment.attachmentName,
-                contents: pendingTextAttachment.attachmentContents,
-                size: new TextEncoder().encode(
-                  pendingTextAttachment.attachmentContents,
-                ).byteLength,
-              }
-            : null,
-        );
         setArtifacts(result.data.artifacts);
         setExampleFlyoutOpen(false);
         setPrompt("");
@@ -2363,7 +2343,7 @@ export default function GeneratorPanel({
                                         messageAttachmentFlyoutPosition.bottom,
                                     }}
                                   >
-                                    <div className="flex items-center gap-2.5 border-b border-[#e9ece6] px-3 py-2.5">
+                                    <div className="flex hidden items-center gap-2.5 border-b border-[#e9ece6] px-3 py-2.5">
                                       <FileText
                                         aria-hidden="true"
                                         className="size-5 shrink-0 text-[#6d7566]"
@@ -2380,7 +2360,7 @@ export default function GeneratorPanel({
                                         </p>
                                       </div>
                                     </div>
-                                    <div className="px-3 py-2.5">
+                                    <div className="px-3 font-semibold tracking-tight py-2.5">
                                       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[10px]">
                                         <dt className="text-[#858880]">Size</dt>
                                         <dd className="text-right font-medium text-[#55584f]">
@@ -2403,7 +2383,7 @@ export default function GeneratorPanel({
                                         </dd>
                                       </dl>
                                       {message.attachmentContents && (
-                                        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[#f1f3ef] p-2 text-[9px] leading-4 text-[#62655e]">
+                                        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-[#f1f3ef] p-2 text-[9px] leading-4 text-[#62655e]">
                                           {message.attachmentContents.slice(
                                             0,
                                             1_000,
@@ -3078,36 +3058,6 @@ export default function GeneratorPanel({
               ) : view === "schema" ? (
                 <div className="relative h-full min-h-0 w-full overflow-hidden">
                   <div className="absolute left-3 top-3 z-30 flex flex-wrap items-center gap-2">
-                    <button
-                      aria-label={
-                        areSchemaRelationshipsAnimated
-                          ? "Pause relationship animations"
-                          : "Play relationship animations"
-                      }
-                      aria-pressed={areSchemaRelationshipsAnimated}
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
-                      onClick={() => {
-                        if (areSchemaRelationshipsAnimated) {
-                          setAnimatedSchemaTable(null);
-                        }
-                        setAreSchemaRelationshipsAnimated(
-                          !areSchemaRelationshipsAnimated,
-                        );
-                      }}
-                      title={
-                        areSchemaRelationshipsAnimated
-                          ? "Pause relationship animations"
-                          : "Play relationship animations"
-                      }
-                      type="button"
-                    >
-                      {areSchemaRelationshipsAnimated ? (
-                        <Pause aria-hidden="true" className="size-3.5" />
-                      ) : (
-                        <Play aria-hidden="true" className="size-3.5" />
-                      )}
-                    </button>
-
                     <div
                       aria-label="Relationship line style"
                       className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
@@ -3192,13 +3142,12 @@ export default function GeneratorPanel({
                     </div>
                     <button
                       aria-label="Auto clean schema layout"
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={cleanSchemaLayout}
                       title="Arrange tables to make relationships easier to follow"
                       type="button"
                     >
                       <Network aria-hidden="true" className="size-3.5" />
-                      
                     </button>
                     {schemaLayoutError && (
                       <span
@@ -3210,12 +3159,41 @@ export default function GeneratorPanel({
                     )}
                     <button
                       aria-label="Fit schema to view"
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={fitSchemaToView}
                       title="Fit schema to view"
                       type="button"
                     >
                       <Maximize2 aria-hidden="true" className="size-3.5" />
+                    </button>
+                    <button
+                      aria-label={
+                        areSchemaRelationshipsAnimated
+                          ? "Pause relationship animations"
+                          : "Play relationship animations"
+                      }
+                      aria-pressed={areSchemaRelationshipsAnimated}
+                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      onClick={() => {
+                        if (areSchemaRelationshipsAnimated) {
+                          setAnimatedSchemaTable(null);
+                        }
+                        setAreSchemaRelationshipsAnimated(
+                          !areSchemaRelationshipsAnimated,
+                        );
+                      }}
+                      title={
+                        areSchemaRelationshipsAnimated
+                          ? "Pause relationship animations"
+                          : "Play relationship animations"
+                      }
+                      type="button"
+                    >
+                      {areSchemaRelationshipsAnimated ? (
+                        <Pause aria-hidden="true" className="size-3.5" />
+                      ) : (
+                        <Play aria-hidden="true" className="size-3.5" />
+                      )}
                     </button>
                   </div>
                   <div
@@ -3400,7 +3378,8 @@ export default function GeneratorPanel({
                                 data-schema-table-handle
                                 onPointerCancel={(event) => {
                                   const drag = schemaTableDragRef.current;
-                                  if (drag?.pointerId !== event.pointerId) return;
+                                  if (drag?.pointerId !== event.pointerId)
+                                    return;
                                   const zoom = schemaZoomRef.current;
                                   const position = {
                                     x:
@@ -3499,7 +3478,8 @@ export default function GeneratorPanel({
                                 }}
                                 onPointerUp={(event) => {
                                   const drag = schemaTableDragRef.current;
-                                  if (drag?.pointerId !== event.pointerId) return;
+                                  if (drag?.pointerId !== event.pointerId)
+                                    return;
                                   const zoom = schemaZoomRef.current;
                                   const position = {
                                     x:
