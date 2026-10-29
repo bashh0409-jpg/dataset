@@ -566,7 +566,7 @@ export default function BugReportDialog({ onClose }: BugReportDialogProps) {
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2
-              className="text-[16px] font-semibold tracking-tight text-[#111827]"
+              className="text-[16px] font-semibold tracking-tight text-[#000]"
               id="bug-report-title"
             >
               {submitted ? "Report received" : "Report a bug"}
@@ -786,13 +786,8 @@ export default function BugReportDialog({ onClose }: BugReportDialogProps) {
             </div>
 
             <section aria-labelledby="diagnostics-title">
-              <h3
-                className="mb-2 px-1 text-[13px] font-semibold tracking-tight text-[#344054]"
-                id="diagnostics-title"
-              >
-                Diagnostic Data
-              </h3>
-              <label className="flex cursor-pointer items-start gap-3 rounded-md bg-black/5 px-3 py-3 font-semibold tracking-tight">
+             
+              <label className="flex cursor-pointer items-start gap-3 rounded-md  px-3 py-3 font-medium tracking-tight">
                 <input
                   checked={includeDiagnostics}
                   className="mt-0.5 size-4 shrink-0 accent-[#242620]"
@@ -802,12 +797,9 @@ export default function BugReportDialog({ onClose }: BugReportDialogProps) {
                   type="checkbox"
                 />
                 <span>
-                  <span className="block text-[13px] font-semibold text-[#344054]">
-                    App Diagnostics
-                  </span>
-                  <span className="mt-1 block text-xs leading-4 text-[#667085]">
-                    Browser and device, page path, viewport, language, and
-                    timezone. Message content and credentials are not included.
+                  
+                  <span className="font-semibold block text-xs leading-4 text-[#999]">
+                   Include diagnostics. user agent, viewport, language, timezone, and page path will be sent with the report.
                   </span>
                 </span>
               </label>
@@ -838,7 +830,7 @@ export default function BugReportDialog({ onClose }: BugReportDialogProps) {
                         </p>
             )}
 
-            <footer className="flex items-center justify-end gap-2 border-t border-[#f2f4f7] pt-3">
+            <footer className="flex items-center justify-end gap-2 ">
               <button
                 className="geist cursor-pointer rounded p-2 text-[13px] font-semibold leading-3 tracking-tight text-[#999] transition duration-300 hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={submitting || recording}
@@ -857,7 +849,7 @@ export default function BugReportDialog({ onClose }: BugReportDialogProps) {
                 }
                 type="submit"
               >
-                {submitting ? "Sending..." : "Send Bug Report"}
+                {submitting ? "Sending..." : "Send"}
               </button>
             </footer>
           </form>
