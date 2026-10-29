@@ -9,9 +9,12 @@ import {
   Copy,
   Download,
   LoaderCircle,
+  Maximize2,
   MessageSquareText,
   PanelRightClose,
   PanelRightOpen,
+  Pause,
+  Play,
   Settings,
   Trash2,
   Table2,
@@ -26,6 +29,7 @@ import {
   type ClipboardEvent,
   type ChangeEvent,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -113,6 +117,14 @@ const examples = [
 ];
 const maxTextAttachmentBytes = 64_000;
 const maxFreeTextAttachmentCharacters = 20_000;
+const schemaCanvasPadding = 2_400;
+const minimumSchemaCanvasWidth = schemaCanvasPadding * 2 + 900;
+const minimumSchemaCanvasHeight = schemaCanvasPadding * 2 + 480;
+const providerFallbackNotice =
+  /The first provider was busy, so this request was handled by (?:Claude|OpenAI) instead\.\s*/g;
+
+const removeProviderFallbackNotice = (content: string) =>
+  content.replace(providerFallbackNotice, "").trimStart();
 
 type GeneratorPanelProps = {
   workspaceId: string;
@@ -179,12 +191,27 @@ export default function GeneratorPanel({
   const dataScrollAxisRef = useRef<"horizontal" | "vertical" | null>(null);
   const dataScrollIdleTimerRef = useRef<number | null>(null);
   const schemaCanvasViewportRef = useRef<HTMLDivElement>(null);
+  const schemaCanvasSurfaceRef = useRef<HTMLDivElement>(null);
   const schemaPanRef = useRef<{
     pointerId: number;
     startX: number;
     startY: number;
     scrollLeft: number;
     scrollTop: number;
+  } | null>(null);
+  const schemaPinchPointersRef = useRef(
+    new Map<number, { x: number; y: number }>(),
+  );
+  const schemaPinchRef = useRef<{
+    distance: number;
+    zoom: number;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
+  const schemaTrackpadGestureRef = useRef<{
+    zoom: number;
+    canvasX: number;
+    canvasY: number;
   } | null>(null);
   const schemaTableDragRef = useRef<{
     pointerId: number;
@@ -193,18 +220,47 @@ export default function GeneratorPanel({
     startY: number;
     position: { x: number; y: number };
   } | null>(null);
+  const schemaTablePositionFrameRef = useRef<number | null>(null);
+  const schemaTablePositionUpdateRef = useRef<{
+    tableName: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const schemaCanvasRecenteringRef = useRef({
+    left: false,
+    top: false,
+    right: false,
+    bottom: false,
+  });
   const [draggingSchemaTable, setDraggingSchemaTable] = useState<string | null>(
     null,
   );
   const [schemaTablePositions, setSchemaTablePositions] = useState<
     Record<string, { x: number; y: number }>
   >({});
+  const [schemaCanvasOffset, setSchemaCanvasOffset] = useState({ x: 0, y: 0 });
   const [isSchemaPanning, setIsSchemaPanning] = useState(false);
   const schemaDiagramRef = useRef<HTMLDivElement>(null);
   const [schemaZoom, setSchemaZoom] = useState(1);
+  const schemaZoomRef = useRef(schemaZoom);
+  const schemaZoomAnimationFrameRef = useRef<number | null>(null);
+  const schemaZoomUpdateRef = useRef<{
+    zoom: number;
+    canvasX: number;
+    canvasY: number;
+    pointerX: number;
+    pointerY: number;
+  } | null>(null);
+  const schemaZoomCommitTimerRef = useRef<number | null>(null);
   const [schemaRelationshipStyle, setSchemaRelationshipStyle] = useState<
     "elbow" | "straight" | "bezier"
   >("elbow");
+  const [areSchemaRelationshipsAnimated, setAreSchemaRelationshipsAnimated] =
+    useState(true);
+  const [animatedSchemaTable, setAnimatedSchemaTable] = useState<
+    string | null
+  >(null);
+  const schemaTableAnimationTimerRef = useRef<number | null>(null);
   const [schemaRelationshipPaths, setSchemaRelationshipPaths] = useState<
     {
       key: string;
@@ -221,8 +277,8 @@ export default function GeneratorPanel({
     }[]
   >([]);
   const [schemaDiagramSize, setSchemaDiagramSize] = useState({
-    width: 0,
-    height: 0,
+    width: minimumSchemaCanvasWidth,
+    height: minimumSchemaCanvasHeight,
   });
 
   const generatedCsv = dataset
@@ -231,6 +287,436 @@ export default function GeneratorPanel({
   const generatedJson = dataset ? JSON.stringify(dataset.records, null, 2) : "";
   const formattedData =
     view === "json" ? generatedJson : view === "csv" ? generatedCsv : "";
+  const playSchemaTableRelationships = useCallback((tableName: string) => {
+    setAnimatedSchemaTable(tableName);
+    if (schemaTableAnimationTimerRef.current !== null) {
+      window.clearTimeout(schemaTableAnimationTimerRef.current);
+    }
+    schemaTableAnimationTimerRef.current = window.setTimeout(() => {
+      setAnimatedSchemaTable(null);
+      schemaTableAnimationTimerRef.current = null;
+    }, 1_400);
+  }, []);
+  const resetSchemaCanvas = useCallback(() => {
+    setSchemaTablePositions({});
+    setSchemaCanvasOffset({ x: 0, y: 0 });
+    schemaCanvasRecenteringRef.current = {
+      left: false,
+      top: false,
+      right: false,
+      bottom: false,
+    };
+    setSchemaDiagramSize({
+      width: minimumSchemaCanvasWidth,
+      height: minimumSchemaCanvasHeight,
+    });
+  }, []);
+  const applySchemaZoom = useCallback(
+    (
+      zoom: number,
+      canvasX: number,
+      canvasY: number,
+      pointerX: number,
+      pointerY: number,
+      keepCurrentViewportCentered = true,
+    ) => {
+      const currentZoom = schemaZoomRef.current;
+      const nextZoom = Math.min(1.5, Math.max(0.2, Number(zoom.toFixed(2))));
+      const viewport = schemaCanvasViewportRef.current;
+      if (keepCurrentViewportCentered && nextZoom < currentZoom && viewport) {
+        pointerX = viewport.clientWidth / 2;
+        pointerY = viewport.clientHeight / 2;
+        canvasX = (viewport.scrollLeft + pointerX) / currentZoom;
+        canvasY = (viewport.scrollTop + pointerY) / currentZoom;
+      }
+      schemaZoomRef.current = nextZoom;
+      schemaZoomUpdateRef.current = {
+        zoom: nextZoom,
+        canvasX,
+        canvasY,
+        pointerX,
+        pointerY,
+      };
+
+      if (schemaZoomCommitTimerRef.current !== null) {
+        window.clearTimeout(schemaZoomCommitTimerRef.current);
+      }
+      schemaZoomCommitTimerRef.current = window.setTimeout(() => {
+        setSchemaZoom(schemaZoomRef.current);
+        schemaZoomCommitTimerRef.current = null;
+      }, 120);
+
+      if (schemaZoomAnimationFrameRef.current !== null) return;
+      schemaZoomAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        const update = schemaZoomUpdateRef.current;
+        const viewport = schemaCanvasViewportRef.current;
+        const surface = schemaCanvasSurfaceRef.current;
+        const diagram = schemaDiagramRef.current;
+        if (!update || !viewport || !surface || !diagram) {
+          schemaZoomAnimationFrameRef.current = null;
+          return;
+        }
+        diagram.style.transform = `scale(${update.zoom})`;
+        surface.style.width = `${diagram.offsetWidth * update.zoom}px`;
+        surface.style.height = `${diagram.offsetHeight * update.zoom}px`;
+        viewport.scrollLeft = Math.max(
+          0,
+          update.canvasX * update.zoom - update.pointerX,
+        );
+        viewport.scrollTop = Math.max(
+          0,
+          update.canvasY * update.zoom - update.pointerY,
+        );
+        schemaZoomAnimationFrameRef.current = null;
+      });
+    },
+    [],
+  );
+  const zoomSchemaAtViewportCenter = useCallback(
+    (zoom: number) => {
+      const viewport = schemaCanvasViewportRef.current;
+      if (!viewport) return;
+      const currentZoom = schemaZoomRef.current;
+      const pointerX = viewport.clientWidth / 2;
+      const pointerY = viewport.clientHeight / 2;
+      applySchemaZoom(
+        zoom,
+        (viewport.scrollLeft + pointerX) / currentZoom,
+        (viewport.scrollTop + pointerY) / currentZoom,
+        pointerX,
+        pointerY,
+      );
+    },
+    [applySchemaZoom],
+  );
+  const fitSchemaToView = useCallback(() => {
+    const viewport = schemaCanvasViewportRef.current;
+    const diagram = schemaDiagramRef.current;
+    if (!viewport || !diagram) return;
+
+    const diagramBounds = diagram.getBoundingClientRect();
+    const tableBounds = Array.from(
+      diagram.querySelectorAll<HTMLElement>("[data-schema-table]"),
+      (table) => table.getBoundingClientRect(),
+    );
+    if (tableBounds.length === 0) return;
+
+    const left = Math.min(
+      ...tableBounds.map(
+        (bounds) => (bounds.left - diagramBounds.left) / schemaZoom,
+      ),
+    );
+    const right = Math.max(
+      ...tableBounds.map(
+        (bounds) => (bounds.right - diagramBounds.left) / schemaZoom,
+      ),
+    );
+    const top = Math.min(
+      ...tableBounds.map(
+        (bounds) => (bounds.top - diagramBounds.top) / schemaZoom,
+      ),
+    );
+    const bottom = Math.max(
+      ...tableBounds.map(
+        (bounds) => (bounds.bottom - diagramBounds.top) / schemaZoom,
+      ),
+    );
+    const nextZoom = Math.min(
+      1.5,
+      Math.max(
+        0.2,
+        Math.min(
+          (viewport.clientWidth - 80) / Math.max(right - left, 1),
+          (viewport.clientHeight - 80) / Math.max(bottom - top, 1),
+        ),
+      ),
+    );
+
+    applySchemaZoom(
+      nextZoom,
+      (left + right) / 2,
+      (top + bottom) / 2,
+      viewport.clientWidth / 2,
+      viewport.clientHeight / 2,
+      false,
+    );
+  }, [applySchemaZoom, schemaZoom]);
+  const extendSchemaCanvas = useCallback(() => {
+    const viewport = schemaCanvasViewportRef.current;
+    if (!viewport) return;
+
+    const edgeThreshold = 160 * schemaZoom;
+    const extendLeft = viewport.scrollLeft < edgeThreshold;
+    const extendTop = viewport.scrollTop < edgeThreshold;
+    const extendRight =
+      viewport.scrollLeft + viewport.clientWidth >
+      viewport.scrollWidth - edgeThreshold;
+    const extendBottom =
+      viewport.scrollTop + viewport.clientHeight >
+      viewport.scrollHeight - edgeThreshold;
+    if (!extendLeft && !extendTop && !extendRight && !extendBottom) return;
+
+    if (extendLeft || extendTop) {
+      setSchemaCanvasOffset((offset) => ({
+        x: offset.x + (extendLeft ? schemaCanvasPadding : 0),
+        y: offset.y + (extendTop ? schemaCanvasPadding : 0),
+      }));
+      if (extendLeft) viewport.scrollLeft += schemaCanvasPadding * schemaZoom;
+      if (extendTop) viewport.scrollTop += schemaCanvasPadding * schemaZoom;
+    }
+    setSchemaDiagramSize((size) => ({
+      width:
+        size.width +
+        (extendLeft || extendRight ? schemaCanvasPadding : 0),
+      height:
+        size.height +
+        (extendTop || extendBottom ? schemaCanvasPadding : 0),
+    }));
+  }, [schemaZoom]);
+  const recenterSchemaCanvasForTable = useCallback(
+    (table: HTMLElement) => {
+      const viewport = schemaCanvasViewportRef.current;
+      const diagram = schemaDiagramRef.current;
+      if (!viewport || !diagram) return;
+
+      const diagramBounds = diagram.getBoundingClientRect();
+      const tableBounds = table.getBoundingClientRect();
+      const zoom = schemaZoomRef.current;
+      const isNearLeftEdge =
+        (tableBounds.left - diagramBounds.left) / zoom < 160;
+      const isNearTopEdge =
+        (tableBounds.top - diagramBounds.top) / zoom < 160;
+      const isNearRightEdge =
+        (diagramBounds.right - tableBounds.right) / zoom < 160;
+      const isNearBottomEdge =
+        (diagramBounds.bottom - tableBounds.bottom) / zoom < 160;
+      const previous = schemaCanvasRecenteringRef.current;
+      const extendLeft = isNearLeftEdge && !previous.left;
+      const extendTop = isNearTopEdge && !previous.top;
+      const extendRight = isNearRightEdge && !previous.right;
+      const extendBottom = isNearBottomEdge && !previous.bottom;
+      schemaCanvasRecenteringRef.current = {
+        left: isNearLeftEdge,
+        top: isNearTopEdge,
+        right: isNearRightEdge,
+        bottom: isNearBottomEdge,
+      };
+      if (!extendLeft && !extendTop && !extendRight && !extendBottom) return;
+
+      if (extendLeft || extendTop) {
+        setSchemaCanvasOffset((offset) => ({
+          x: offset.x + (extendLeft ? schemaCanvasPadding : 0),
+          y: offset.y + (extendTop ? schemaCanvasPadding : 0),
+        }));
+        if (extendLeft) {
+          viewport.scrollLeft += schemaCanvasPadding * zoom;
+        }
+        if (extendTop) {
+          viewport.scrollTop += schemaCanvasPadding * zoom;
+        }
+      }
+      setSchemaDiagramSize((size) => ({
+        width:
+          size.width +
+          (extendLeft || extendRight ? schemaCanvasPadding : 0),
+        height:
+          size.height +
+          (extendTop || extendBottom ? schemaCanvasPadding : 0),
+      }));
+    },
+    [],
+  );
+  const handleSchemaCanvasPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const viewport = schemaCanvasViewportRef.current;
+      if (!viewport) return;
+
+      if (event.pointerType === "touch") {
+        schemaPinchPointersRef.current.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+        viewport.setPointerCapture(event.pointerId);
+        if (schemaPinchPointersRef.current.size === 2) {
+          const [first, second] = [
+            ...schemaPinchPointersRef.current.values(),
+          ];
+          if (!first || !second) return;
+          const midpointX = (first.x + second.x) / 2;
+          const midpointY = (first.y + second.y) / 2;
+          const viewportBounds = viewport.getBoundingClientRect();
+          schemaPinchRef.current = {
+            distance: Math.hypot(second.x - first.x, second.y - first.y),
+            zoom: schemaZoomRef.current,
+            canvasX:
+              (viewport.scrollLeft + midpointX - viewportBounds.left) /
+              schemaZoomRef.current,
+            canvasY:
+              (viewport.scrollTop + midpointY - viewportBounds.top) /
+              schemaZoomRef.current,
+          };
+        }
+        return;
+      }
+
+      if (
+        event.pointerType !== "mouse" ||
+        event.button !== 0 ||
+        (event.target as HTMLElement).closest("[data-schema-table]")
+      ) {
+        return;
+      }
+      schemaPanRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+      };
+      viewport.setPointerCapture(event.pointerId);
+      setIsSchemaPanning(true);
+    },
+    [],
+  );
+  const handleSchemaCanvasPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (schemaPinchPointersRef.current.has(event.pointerId)) {
+        schemaPinchPointersRef.current.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+        const pinch = schemaPinchRef.current;
+        const viewport = schemaCanvasViewportRef.current;
+        if (
+          schemaPinchPointersRef.current.size !== 2 ||
+          !pinch ||
+          !viewport
+        ) {
+          return;
+        }
+        const [first, second] = [...schemaPinchPointersRef.current.values()];
+        if (!first || !second) return;
+        const distance = Math.hypot(second.x - first.x, second.y - first.y);
+        if (distance === 0) return;
+        const viewportBounds = viewport.getBoundingClientRect();
+        const midpointX = (first.x + second.x) / 2 - viewportBounds.left;
+        const midpointY = (first.y + second.y) / 2 - viewportBounds.top;
+
+        applySchemaZoom(
+          pinch.zoom * (distance / pinch.distance),
+          pinch.canvasX,
+          pinch.canvasY,
+          midpointX,
+          midpointY,
+        );
+        return;
+      }
+
+      const pan = schemaPanRef.current;
+      const viewport = schemaCanvasViewportRef.current;
+      if (!pan || pan.pointerId !== event.pointerId || !viewport) return;
+      viewport.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX);
+      viewport.scrollTop = pan.scrollTop - (event.clientY - pan.startY);
+    },
+    [applySchemaZoom],
+  );
+  const handleSchemaCanvasPointerEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (schemaPinchPointersRef.current.delete(event.pointerId)) {
+        if (schemaPinchPointersRef.current.size < 2) {
+          schemaPinchRef.current = null;
+        }
+        return;
+      }
+      if (schemaPanRef.current?.pointerId !== event.pointerId) return;
+      schemaPanRef.current = null;
+      setIsSchemaPanning(false);
+    },
+    [],
+  );
+  const handleSchemaCanvasWheel = useCallback(
+    (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+
+      event.preventDefault();
+      const viewport = schemaCanvasViewportRef.current;
+      if (!viewport) return;
+
+      const viewportBounds = viewport.getBoundingClientRect();
+      const pointerX = event.clientX - viewportBounds.left;
+      const pointerY = event.clientY - viewportBounds.top;
+      const currentZoom = schemaZoomRef.current;
+      const canvasX = (viewport.scrollLeft + pointerX) / currentZoom;
+      const canvasY = (viewport.scrollTop + pointerY) / currentZoom;
+      applySchemaZoom(
+        currentZoom * Math.pow(1.1, -event.deltaY / 100),
+        canvasX,
+        canvasY,
+        pointerX,
+        pointerY,
+      );
+    },
+    [applySchemaZoom],
+  );
+  const handleSchemaTrackpadGestureStart = useCallback(
+    (event: Event) => {
+      event.preventDefault();
+      const viewport = schemaCanvasViewportRef.current;
+      if (!viewport) return;
+
+      const gestureEvent = event as Event & {
+        clientX?: number;
+        clientY?: number;
+      };
+      const viewportBounds = viewport.getBoundingClientRect();
+      const pointerX =
+        typeof gestureEvent.clientX === "number"
+          ? gestureEvent.clientX - viewportBounds.left
+          : viewport.clientWidth / 2;
+      const pointerY =
+        typeof gestureEvent.clientY === "number"
+          ? gestureEvent.clientY - viewportBounds.top
+          : viewport.clientHeight / 2;
+      schemaTrackpadGestureRef.current = {
+        zoom: schemaZoomRef.current,
+        canvasX: (viewport.scrollLeft + pointerX) / schemaZoomRef.current,
+        canvasY: (viewport.scrollTop + pointerY) / schemaZoomRef.current,
+      };
+    },
+    [],
+  );
+  const handleSchemaTrackpadGestureChange = useCallback((event: Event) => {
+    event.preventDefault();
+    const viewport = schemaCanvasViewportRef.current;
+    const gesture = schemaTrackpadGestureRef.current;
+    if (!viewport || !gesture) return;
+
+    const gestureEvent = event as Event & {
+      scale?: number;
+      clientX?: number;
+      clientY?: number;
+    };
+    const viewportBounds = viewport.getBoundingClientRect();
+    const pointerX =
+      typeof gestureEvent.clientX === "number"
+        ? gestureEvent.clientX - viewportBounds.left
+        : viewport.clientWidth / 2;
+    const pointerY =
+      typeof gestureEvent.clientY === "number"
+        ? gestureEvent.clientY - viewportBounds.top
+        : viewport.clientHeight / 2;
+    applySchemaZoom(
+      gesture.zoom * (gestureEvent.scale ?? 1),
+      gesture.canvasX,
+      gesture.canvasY,
+      pointerX,
+      pointerY,
+    );
+  }, [applySchemaZoom]);
+  const handleSchemaTrackpadGestureEnd = useCallback((event: Event) => {
+    event.preventDefault();
+    schemaTrackpadGestureRef.current = null;
+  }, []);
   const canSubmitPrompt =
     prompt.trim().length >= (conversation.length > 0 ? 1 : 5) ||
     textAttachment !== null;
@@ -253,6 +739,76 @@ export default function GeneratorPanel({
       container.scrollHeight - container.scrollTop - container.clientHeight > 8;
     setShowScrollToBottom(hasMoreBelow);
   }, [conversation.length]);
+
+  useEffect(() => {
+    return () => {
+      if (schemaTableAnimationTimerRef.current !== null) {
+        window.clearTimeout(schemaTableAnimationTimerRef.current);
+      }
+      if (schemaZoomCommitTimerRef.current !== null) {
+        window.clearTimeout(schemaZoomCommitTimerRef.current);
+      }
+      if (schemaZoomAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(schemaZoomAnimationFrameRef.current);
+      }
+      if (schemaTablePositionFrameRef.current !== null) {
+        window.cancelAnimationFrame(schemaTablePositionFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewport = schemaCanvasViewportRef.current;
+    if (!viewport || view !== "schema") return;
+
+    viewport.addEventListener("wheel", handleSchemaCanvasWheel, {
+      passive: false,
+    });
+    viewport.addEventListener("gesturestart", handleSchemaTrackpadGestureStart, {
+      passive: false,
+    });
+    viewport.addEventListener("gesturechange", handleSchemaTrackpadGestureChange, {
+      passive: false,
+    });
+    viewport.addEventListener("gestureend", handleSchemaTrackpadGestureEnd, {
+      passive: false,
+    });
+    return () => {
+      viewport.removeEventListener("wheel", handleSchemaCanvasWheel);
+      viewport.removeEventListener(
+        "gesturestart",
+        handleSchemaTrackpadGestureStart,
+      );
+      viewport.removeEventListener(
+        "gesturechange",
+        handleSchemaTrackpadGestureChange,
+      );
+      viewport.removeEventListener("gestureend", handleSchemaTrackpadGestureEnd);
+    };
+  }, [
+    handleSchemaCanvasWheel,
+    handleSchemaTrackpadGestureChange,
+    handleSchemaTrackpadGestureEnd,
+    handleSchemaTrackpadGestureStart,
+    view,
+  ]);
+
+  useEffect(() => {
+    schemaZoomRef.current = schemaZoom;
+  }, [schemaZoom]);
+
+  useEffect(() => {
+    if (view !== "schema") return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = schemaCanvasViewportRef.current;
+      if (!viewport) return;
+      viewport.scrollLeft = schemaCanvasPadding * schemaZoomRef.current;
+      viewport.scrollTop = schemaCanvasPadding * schemaZoomRef.current;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [generatedTables, view]);
 
   useEffect(() => {
     const container = conversationScrollRef.current;
@@ -285,12 +841,13 @@ export default function GeneratorPanel({
     const updateRelationships = () => {
       const bounds = diagram.getBoundingClientRect();
       const viewport = schemaCanvasViewportRef.current;
-      const canvasX = (x: number) => (x - bounds.left) / schemaZoom;
-      const canvasY = (y: number) => (y - bounds.top) / schemaZoom;
+      const currentZoom = schemaZoomRef.current;
+      const canvasX = (x: number) => (x - bounds.left) / currentZoom;
+      const canvasY = (y: number) => (y - bounds.top) / currentZoom;
       const width = Math.max(
         diagram.scrollWidth,
         diagram.clientWidth,
-        (viewport?.clientWidth ?? 0) / schemaZoom,
+        (viewport?.clientWidth ?? 0) / currentZoom,
         ...Array.from(
           diagram.querySelectorAll<HTMLElement>("[data-schema-table]"),
           (card) => canvasX(card.getBoundingClientRect().right) + 32,
@@ -299,7 +856,7 @@ export default function GeneratorPanel({
       const height = Math.max(
         diagram.scrollHeight,
         diagram.clientHeight,
-        (viewport?.clientHeight ?? 0) / schemaZoom,
+        (viewport?.clientHeight ?? 0) / currentZoom,
         ...Array.from(
           diagram.querySelectorAll<HTMLElement>("[data-schema-table]"),
           (card) => canvasY(card.getBoundingClientRect().bottom) + 32,
@@ -620,9 +1177,10 @@ export default function GeneratorPanel({
     };
   }, [
     generatedTables,
+    schemaCanvasOffset,
     schemaRelationshipStyle,
     schemaTablePositions,
-    schemaZoom,
+    schemaZoomRef,
     view,
   ]);
 
@@ -748,8 +1306,12 @@ export default function GeneratorPanel({
         }
         setConversationId(result.data.id);
         pendingConversationScrollRef.current = "auto";
-        setConversation(result.data.messages);
-        const pendingTextAttachment = [...result.data.messages]
+        const messages = result.data.messages.map((message) => ({
+          ...message,
+          content: removeProviderFallbackNotice(message.content),
+        }));
+        setConversation(messages);
+        const pendingTextAttachment = [...messages]
           .reverse()
           .find(
             (message) =>
@@ -774,6 +1336,7 @@ export default function GeneratorPanel({
         setPrompt("");
         setDataset(null);
         setGeneratedTables([]);
+        resetSchemaCanvas();
         setView("table");
         setError("");
         setSaveError("");
@@ -790,7 +1353,12 @@ export default function GeneratorPanel({
     return () => {
       active = false;
     };
-  }, [requestedConversationId, onConversationOpened, workspaceId]);
+  }, [
+    requestedConversationId,
+    onConversationOpened,
+    resetSchemaCanvas,
+    workspaceId,
+  ]);
 
   const persistConversation = async (
     messages: ConversationMessage[],
@@ -853,7 +1421,7 @@ export default function GeneratorPanel({
     });
     setShowDataPanel(true);
     setGeneratedTables([]);
-    setSchemaTablePositions({});
+    resetSchemaCanvas();
     setArtifacts([]);
     setConversation([]);
     setTextAttachment(null);
@@ -913,7 +1481,7 @@ export default function GeneratorPanel({
     setError("");
     setDataset(null);
     setGeneratedTables([]);
-    setSchemaTablePositions({});
+    resetSchemaCanvas();
     setGenerationPhase("analyzing");
     setGenerating(true);
     const phaseTimeout = window.setTimeout(
@@ -944,9 +1512,7 @@ export default function GeneratorPanel({
           ...messages,
           {
             role: "assistant" as const,
-            content: result.modelNotice
-              ? `${result.modelNotice} ${result.question}`
-              : result.question,
+            content: result.question,
             modelUsed: result.modelUsed,
           },
         ];
@@ -965,7 +1531,7 @@ export default function GeneratorPanel({
         seed: table.seed,
       }));
       setGeneratedTables(datasets);
-      setSchemaTablePositions({});
+      resetSchemaCanvas();
       setDataset(datasets[0] ?? null);
       setShowDataPanel(true);
       setView("table");
@@ -984,7 +1550,7 @@ export default function GeneratorPanel({
         ...savedMessages,
         {
           role: "assistant" as const,
-          content: `${result.modelNotice ? `${result.modelNotice} ` : ""}Generated ${tables.length} related tables: ${tableSummary}. Foreign-key references use generated parent records. Open Schema to inspect the proposed database design, or select a table to preview or export its records.`,
+          content: `Generated ${tables.length} related tables: ${tableSummary}. Foreign-key references use generated parent records. Open Schema to inspect the proposed database design, or select a table to preview or export its records.`,
           modelUsed: result.modelUsed,
         },
       ];
@@ -1632,7 +2198,7 @@ export default function GeneratorPanel({
                                         },
                                       ],
                                 );
-                                setSchemaTablePositions({});
+                                resetSchemaCanvas();
                                 setDataset({
                                   name: linkedArtifact.name,
                                   fields: linkedArtifact.fields,
@@ -2200,153 +2766,147 @@ export default function GeneratorPanel({
                   </p>
                 </div>
               ) : view === "schema" ? (
-                  <div className="relative h-full min-h-0 w-full overflow-hidden">
-                    <div className="absolute left-3 top-3 z-30 flex flex-wrap items-center gap-2">
-                      <div
-                        aria-label="Relationship line style"
-                        className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
-                        role="group"
+                <div className="relative h-full min-h-0 w-full overflow-hidden">
+                  <div className="absolute left-3 top-3 z-30 flex flex-wrap items-center gap-2">
+                    <button
+                      aria-label={
+                        areSchemaRelationshipsAnimated
+                          ? "Pause relationship animations"
+                          : "Play relationship animations"
+                      }
+                      aria-pressed={areSchemaRelationshipsAnimated}
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      onClick={() => {
+                        if (areSchemaRelationshipsAnimated) {
+                          setAnimatedSchemaTable(null);
+                        }
+                        setAreSchemaRelationshipsAnimated(
+                          !areSchemaRelationshipsAnimated,
+                        );
+                      }}
+                      title={
+                        areSchemaRelationshipsAnimated
+                          ? "Pause relationship animations"
+                          : "Play relationship animations"
+                      }
+                      type="button"
+                    >
+                      {areSchemaRelationshipsAnimated ? (
+                        <Pause aria-hidden="true" className="size-3.5" />
+                      ) : (
+                        <Play aria-hidden="true" className="size-3.5" />
+                      )}
+                    </button>
+
+                    <div
+                      aria-label="Relationship line style"
+                      className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
+                      role="group"
+                    >
+                      <button
+                        aria-pressed={schemaRelationshipStyle === "elbow"}
+                        className={`rounded px-2 py-1 text-[10px] font-medium transition ${
+                          schemaRelationshipStyle === "elbow"
+                            ? "bg-[#eef2eb] text-[#3f5838]"
+                            : "text-[#686a64] hover:bg-[#f5f6f3]"
+                        }`}
+                        onClick={() => setSchemaRelationshipStyle("elbow")}
+                        type="button"
                       >
-                        <button
-                          aria-pressed={schemaRelationshipStyle === "elbow"}
-                          className={`rounded px-2 py-1 text-[10px] font-medium transition ${
-                            schemaRelationshipStyle === "elbow"
-                              ? "bg-[#eef2eb] text-[#3f5838]"
-                              : "text-[#686a64] hover:bg-[#f5f6f3]"
-                          }`}
-                          onClick={() => setSchemaRelationshipStyle("elbow")}
-                          type="button"
-                        >
-                          Elbow
-                        </button>
-                        <button
-                          aria-pressed={schemaRelationshipStyle === "straight"}
-                          className={`rounded px-2 py-1 text-[10px] font-medium transition ${
-                            schemaRelationshipStyle === "straight"
-                              ? "bg-[#eef2eb] text-[#3f5838]"
-                              : "text-[#686a64] hover:bg-[#f5f6f3]"
-                          }`}
-                          onClick={() => setSchemaRelationshipStyle("straight")}
-                          type="button"
-                        >
-                          Straight
-                        </button>
-                        <button
-                          aria-pressed={schemaRelationshipStyle === "bezier"}
-                          className={`rounded px-2 py-1 text-[10px] font-medium transition ${
-                            schemaRelationshipStyle === "bezier"
-                              ? "bg-[#eef2eb] text-[#3f5838]"
-                              : "text-[#686a64] hover:bg-[#f5f6f3]"
-                          }`}
-                          onClick={() => setSchemaRelationshipStyle("bezier")}
-                          type="button"
-                        >
-                          Bezier
-                        </button>
-                      </div>
-                      <div
-                        aria-label="Schema zoom controls"
-                        className="flex items-center gap-1 rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
+                        Elbow
+                      </button>
+                      <button
+                        aria-pressed={schemaRelationshipStyle === "straight"}
+                        className={`rounded px-2 py-1 text-[10px] font-medium transition ${
+                          schemaRelationshipStyle === "straight"
+                            ? "bg-[#eef2eb] text-[#3f5838]"
+                            : "text-[#686a64] hover:bg-[#f5f6f3]"
+                        }`}
+                        onClick={() => setSchemaRelationshipStyle("straight")}
+                        type="button"
                       >
-                        <button
-                          aria-label="Zoom out schema"
-                          className="flex size-6 items-center justify-center rounded text-[#555850] transition hover:bg-[#f1f3ee] disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={schemaZoom <= 0.5}
-                          onClick={() =>
-                            setSchemaZoom((zoom) =>
-                              Math.max(0.5, Number((zoom - 0.1).toFixed(2))),
-                            )
-                          }
-                          type="button"
-                        >
-                          <ZoomOut aria-hidden="true" className="size-4" />
-                        </button>
-                        <button
-                          aria-label="Reset schema zoom"
-                          className="size-6 rounded px-1 text-[10px] font-semibold tabular-nums text-[#555850] transition hover:bg-[#f1f3ee]"
-                          onClick={() => setSchemaZoom(1)}
-                          title="Reset zoom"
-                          type="button"
-                        >
-                          {Math.round(schemaZoom * 100)}
-                        </button>
-                        <button
-                          aria-label="Zoom in schema"
-                          className="flex size-6 items-center justify-center rounded text-[#555850] transition hover:bg-[#f1f3ee] disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={schemaZoom >= 1.5}
-                          onClick={() =>
-                            setSchemaZoom((zoom) =>
-                              Math.min(1.5, Number((zoom + 0.1).toFixed(2))),
-                            )
-                          }
-                          type="button"
-                        >
-                          <ZoomIn aria-hidden="true" className="size-4" />
-                        </button>
-                      </div>
+                        Straight
+                      </button>
+                      <button
+                        aria-pressed={schemaRelationshipStyle === "bezier"}
+                        className={`rounded px-2 py-1 text-[10px] font-medium transition ${
+                          schemaRelationshipStyle === "bezier"
+                            ? "bg-[#eef2eb] text-[#3f5838]"
+                            : "text-[#686a64] hover:bg-[#f5f6f3]"
+                        }`}
+                        onClick={() => setSchemaRelationshipStyle("bezier")}
+                        type="button"
+                      >
+                        Bezier
+                      </button>
                     </div>
                     <div
-                      aria-label="Schema relationship diagram canvas"
-                      className={`absolute inset-0 overflow-auto overscroll-contain ${
-                        isSchemaPanning ? "cursor-grabbing" : "cursor-grab"
-                      }`}
-                    onPointerCancel={(event) => {
-                      if (schemaPanRef.current?.pointerId !== event.pointerId) {
-                        return;
-                      }
-                      schemaPanRef.current = null;
-                      setIsSchemaPanning(false);
-                    }}
-                    onPointerDown={(event) => {
-                      if (
-                        event.pointerType !== "mouse" ||
-                        event.button !== 0 ||
-                        (event.target as HTMLElement).closest(
-                          "[data-schema-table]",
-                        )
-                      ) {
-                        return;
-                      }
-                      const viewport = schemaCanvasViewportRef.current;
-                      if (!viewport) return;
-                      schemaPanRef.current = {
-                        pointerId: event.pointerId,
-                        startX: event.clientX,
-                        startY: event.clientY,
-                        scrollLeft: viewport.scrollLeft,
-                        scrollTop: viewport.scrollTop,
-                      };
-                      viewport.setPointerCapture(event.pointerId);
-                      setIsSchemaPanning(true);
-                    }}
-                    onPointerMove={(event) => {
-                      const pan = schemaPanRef.current;
-                      const viewport = schemaCanvasViewportRef.current;
-                      if (
-                        !pan ||
-                        pan.pointerId !== event.pointerId ||
-                        !viewport
-                      ) {
-                        return;
-                      }
-                      viewport.scrollLeft =
-                        pan.scrollLeft - (event.clientX - pan.startX);
-                      viewport.scrollTop =
-                        pan.scrollTop - (event.clientY - pan.startY);
-                    }}
-                    onPointerUp={(event) => {
-                      if (schemaPanRef.current?.pointerId !== event.pointerId) {
-                        return;
-                      }
-                      schemaPanRef.current = null;
-                      setIsSchemaPanning(false);
-                    }}
+                      aria-label="Schema zoom controls"
+                      className="flex items-center gap-1 rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
+                    >
+                      <button
+                        aria-label="Zoom out schema"
+                        className="flex size-6 items-center justify-center rounded text-[#555850] transition hover:bg-[#f1f3ee] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={schemaZoom <= 0.2}
+                        onClick={() =>
+                          zoomSchemaAtViewportCenter(
+                            schemaZoomRef.current - 0.1,
+                          )
+                        }
+                        type="button"
+                      >
+                        <ZoomOut aria-hidden="true" className="size-4" />
+                      </button>
+                      <button
+                        aria-label="Reset schema zoom"
+                        className="size-6 rounded px-1 text-[10px] font-semibold tabular-nums text-[#555850] transition hover:bg-[#f1f3ee]"
+                        onClick={() => zoomSchemaAtViewportCenter(1)}
+                        title="Reset zoom"
+                        type="button"
+                      >
+                        {Math.round(schemaZoom * 100)}
+                      </button>
+                      <button
+                        aria-label="Zoom in schema"
+                        className="flex size-6 items-center justify-center rounded text-[#555850] transition hover:bg-[#f1f3ee] disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={schemaZoom >= 1.5}
+                        onClick={() =>
+                          zoomSchemaAtViewportCenter(
+                            schemaZoomRef.current + 0.1,
+                          )
+                        }
+                        type="button"
+                      >
+                        <ZoomIn aria-hidden="true" className="size-4" />
+                      </button>
+                    </div>
+                    <button
+                      aria-label="Fit schema to view"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      onClick={fitSchemaToView}
+                      title="Fit schema to view"
+                      type="button"
+                    >
+                      <Maximize2 aria-hidden="true" className="size-3.5" />
+                    </button>
+                  </div>
+                  <div
+                    aria-label="Schema relationship diagram canvas"
+                    className={`absolute inset-0 touch-none overflow-auto overscroll-contain ${
+                      isSchemaPanning ? "cursor-grabbing" : "cursor-grab"
+                    }`}
+                    onPointerCancel={handleSchemaCanvasPointerEnd}
+                    onPointerDown={handleSchemaCanvasPointerDown}
+                    onPointerMove={handleSchemaCanvasPointerMove}
+                    onPointerUp={handleSchemaCanvasPointerEnd}
+                    onScroll={extendSchemaCanvas}
                     ref={schemaCanvasViewportRef}
                     role="region"
                     tabIndex={0}
                   >
                     <div
                       className="relative"
+                      ref={schemaCanvasSurfaceRef}
                       style={{
                         width: schemaDiagramSize.width * schemaZoom,
                         height: schemaDiagramSize.height * schemaZoom,
@@ -2375,23 +2935,31 @@ export default function GeneratorPanel({
                               viewBox={`0 0 ${schemaDiagramSize.width} ${schemaDiagramSize.height}`}
                               width={schemaDiagramSize.width}
                             >
-                              {schemaRelationshipPaths.map((relationship) => (
-                                <g key={relationship.key}>
-                                  <title>
-                                    {relationship.key} references{" "}
-                                    {relationship.target}
-                                  </title>
-                                  <path
-                                    d={relationship.path}
-                                    fill="none"
-                                    stroke="#7894a6"
-                                    strokeWidth="1.5"
-                                  />
-                                  {draggingSchemaTable !== null &&
-                                    (draggingSchemaTable ===
-                                      relationship.sourceTable ||
-                                      draggingSchemaTable ===
-                                        relationship.targetTable) && (
+                              {schemaRelationshipPaths.map((relationship) => {
+                                const isRelationshipAnimated =
+                                  areSchemaRelationshipsAnimated ||
+                                  [
+                                    draggingSchemaTable,
+                                    animatedSchemaTable,
+                                  ].some(
+                                    (tableName) =>
+                                      tableName === relationship.sourceTable ||
+                                      tableName === relationship.targetTable,
+                                  );
+
+                                return (
+                                  <g key={relationship.key}>
+                                    <title>
+                                      {relationship.key} references{" "}
+                                      {relationship.target}
+                                    </title>
+                                    <path
+                                      d={relationship.path}
+                                      fill="none"
+                                      stroke="#7894a6"
+                                      strokeWidth="1.5"
+                                    />
+                                    {isRelationshipAnimated && (
                                       <g>
                                         <path
                                           className="schema-relationship-flow"
@@ -2415,71 +2983,82 @@ export default function GeneratorPanel({
                                         </circle>
                                       </g>
                                     )}
-                                  <g aria-label={relationship.label}>
-                                    <g
-                                      transform={`translate(${relationship.labelX} ${relationship.labelY}) rotate(${relationship.labelAngle})`}
-                                    >
-                                    <rect
-                                      fill="#ffffff"
-                                      height="18"
-                                      rx="4"
-                                      stroke="#9ab0bd"
-                                      strokeWidth="0.8"
-                                      width={Math.min(
-                                        190,
-                                        Math.max(
-                                          92,
-                                          relationship.label.length * 5.2 + 14,
-                                        ),
-                                      )}
-                                      x={
-                                        -Math.min(
-                                          190,
-                                          Math.max(
-                                            92,
-                                            relationship.label.length * 5.2 +
-                                              14,
-                                          ),
-                                        ) / 2
-                                      }
-                                      y={-9}
-                                    />
-                                    <text
-                                      dominantBaseline="middle"
-                                      fill="#3f5c6e"
-                                      fontSize="8.5"
-                                      fontWeight="600"
-                                      textAnchor="middle"
-                                      x={0}
-                                      y={0}
-                                    >
-                                      {relationship.label}
-                                    </text>
+                                    <g aria-label={relationship.label}>
+                                      <g
+                                        transform={`translate(${relationship.labelX} ${relationship.labelY}) rotate(${relationship.labelAngle})`}
+                                      >
+                                        <rect
+                                          fill="#ffffff"
+                                          height="18"
+                                          rx="4"
+                                          stroke="#9ab0bd"
+                                          strokeWidth="0.8"
+                                          width={Math.min(
+                                            190,
+                                            Math.max(
+                                              92,
+                                              relationship.label.length * 5.2 +
+                                                14,
+                                            ),
+                                          )}
+                                          x={
+                                            -Math.min(
+                                              190,
+                                              Math.max(
+                                                92,
+                                                relationship.label.length *
+                                                  5.2 +
+                                                  14,
+                                              ),
+                                            ) / 2
+                                          }
+                                          y={-9}
+                                        />
+                                        <text
+                                          dominantBaseline="middle"
+                                          fill="#3f5c6e"
+                                          fontSize="8.5"
+                                          fontWeight="600"
+                                          textAnchor="middle"
+                                          x={0}
+                                          y={0}
+                                        >
+                                          {relationship.label}
+                                        </text>
+                                      </g>
                                     </g>
+                                    <circle
+                                      cx={relationship.start.x}
+                                      cy={relationship.start.y}
+                                      fill="#7894a6"
+                                      r="3"
+                                    />
+                                    <circle
+                                      cx={relationship.end.x}
+                                      cy={relationship.end.y}
+                                      fill="#7894a6"
+                                      r="3"
+                                    />
                                   </g>
-                                  <circle
-                                    cx={relationship.start.x}
-                                    cy={relationship.start.y}
-                                    fill="#7894a6"
-                                    r="3"
-                                  />
-                                  <circle
-                                    cx={relationship.end.x}
-                                    cy={relationship.end.y}
-                                    fill="#7894a6"
-                                    r="3"
-                                  />
-                                </g>
-                              ))}
+                                );
+                              })}
                             </svg>
                           )}
-                        <div className="relative z-10 grid grid-cols-[repeat(3,260px)] items-start gap-x-16 gap-y-12 p-10">
+                        <div
+                          className="relative z-10 grid grid-cols-[repeat(3,260px)] items-start gap-x-16 gap-y-12 p-10"
+                          style={{
+                            transform: `translate(${schemaCanvasPadding + schemaCanvasOffset.x}px, ${schemaCanvasPadding + schemaCanvasOffset.y}px)`,
+                          }}
+                        >
                           {generatedTables.map((table) => (
                             <article
                               aria-label={`${table.name} table schema`}
                               className="w-[260px] overflow-hidden rounded border border-[#dfe3dd] bg-white shadow-[0_2px_8px_rgba(20,24,18,0.08)]"
                               data-schema-table={table.name}
                               key={table.name}
+                              onClick={() =>
+                                playSchemaTableRelationships(table.name)
+                              }
                               style={{
                                 transform: `translate(${schemaTablePositions[table.name]?.x ?? 0}px, ${schemaTablePositions[table.name]?.y ?? 0}px)`,
                               }}
@@ -2534,23 +3113,47 @@ export default function GeneratorPanel({
                                   ) {
                                     return;
                                   }
-                                  setSchemaTablePositions((positions) => ({
-                                    ...positions,
-                                    [drag.tableName]: {
-                                      x: Math.max(
-                                        -32,
-                                        drag.position.x +
-                                          (event.clientX - drag.startX) /
-                                            schemaZoom,
-                                      ),
-                                      y: Math.max(
-                                        -32,
-                                        drag.position.y +
-                                          (event.clientY - drag.startY) /
-                                            schemaZoom,
-                                      ),
-                                    },
-                                  }));
+                                  const zoom = schemaZoomRef.current;
+                                  const x =
+                                    drag.position.x +
+                                    (event.clientX - drag.startX) / zoom;
+                                  const y =
+                                    drag.position.y +
+                                    (event.clientY - drag.startY) / zoom;
+                                  const table =
+                                    event.currentTarget.closest<HTMLElement>(
+                                      "[data-schema-table]",
+                                    );
+                                  if (!table) return;
+
+                                  table.style.transform = `translate(${x}px, ${y}px)`;
+                                  schemaTablePositionUpdateRef.current = {
+                                    tableName: drag.tableName,
+                                    x,
+                                    y,
+                                  };
+                                  if (
+                                    schemaTablePositionFrameRef.current ===
+                                    null
+                                  ) {
+                                    schemaTablePositionFrameRef.current =
+                                      window.requestAnimationFrame(() => {
+                                        const update =
+                                          schemaTablePositionUpdateRef.current;
+                                        if (update) {
+                                          setSchemaTablePositions((positions) => ({
+                                            ...positions,
+                                            [update.tableName]: {
+                                              x: update.x,
+                                              y: update.y,
+                                            },
+                                          }));
+                                        }
+                                        schemaTablePositionFrameRef.current =
+                                          null;
+                                      });
+                                  }
+                                  recenterSchemaCanvasForTable(table);
                                 }}
                                 onPointerUp={(event) => {
                                   if (

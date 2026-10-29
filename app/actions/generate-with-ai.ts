@@ -673,9 +673,6 @@ export async function generateWithAi(
         await releaseProviderReservation();
       }
 
-      if (response.ok) {
-        modelNotice = `The first provider was busy, so this request was handled by ${model === "claude" ? "Claude" : "OpenAI"} instead.`;
-      }
     }
   }
 
