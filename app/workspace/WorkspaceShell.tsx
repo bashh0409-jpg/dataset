@@ -869,8 +869,7 @@ export default function WorkspaceShell({
   );
 
   return (
-    <>
-    <main className="workspace-shell fixed inset-0 z-[60] flex min-h-svh overflow-hidden bg-[#fbfcf9] text-[#555752] max-[640px]:hidden">
+    <main className="workspace-shell fixed inset-0 z-[60] flex min-h-svh overflow-hidden bg-[#fbfcf9] text-[#555752]">
       <aside
         aria-label="Workspace sidebar"
         className="flex w-[260px] shrink-0 flex-col border-r border-[#e9ebe6] bg-[#fbfcf9] max-[640px]:w-[68px]"
@@ -1473,23 +1472,5 @@ export default function WorkspaceShell({
         )}
       </section>
     </main>
-    <main
-      className="fixed inset-0 z-[60] hidden min-h-screen items-center justify-center px-6 text-center max-[640px]:flex"
-      aria-labelledby="desktop-only-title"
-    >
-      <div className="max-w-sm">
-        <p
-          className="mon geist mb-2 max-w-xs overflow-hidden text-center text-xl font-semibold tracking-tighter text-black"
-          id="desktop-only-title"
-        >
-          Plot twist: we’re still building.
-        </p>
-        <p className="geist max-w-xs overflow-hidden text-center text-[13px] font-semibold leading-3 tracking-tight text-[#999]">
-          Mobile optimization is still on the way. For now, please open
-          Synthetic on a tablet or desktop for the best experience.
-        </p>
-      </div>
-    </main>
-    </>
   );
 }

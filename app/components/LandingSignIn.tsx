@@ -30,7 +30,7 @@ export default function LandingSignIn() {
       <button
         onClick={openSignIn}
         type="button"
-        className="cursor-pointer rounded bg-black p-1 px-4 text-lg font-semibold tracking-tight text-white"
+        className="cursor-pointer rounded bg-black p-2 px-4 text-lg font-semibold tracking-tight text-white"
       >
         Sign In
       </button>
