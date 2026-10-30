@@ -1,9 +1,13 @@
 "use client";
 
-import { Check, Mail, UsersRound } from "lucide-react";
+import { Mail, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createWorkspaceInvite } from "@/app/actions/onboarding";
-import { getWorkspaceCreditBalance } from "@/app/actions/workspace-credits";
+import {
+  getWorkspaceCreditBalance,
+  getWorkspaceDoublePremiumCreditCost,
+  setWorkspaceDoublePremiumCreditCost,
+} from "@/app/actions/workspace-credits";
 import {
   getWorkspaceMembers,
   type WorkspaceMember,
@@ -40,6 +44,18 @@ export default function WorkspaceAccessDialog({
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [creditError, setCreditError] = useState("");
   const [creditLoading, setCreditLoading] = useState(mode === "manage");
+  const [doubleCreditCostState, setDoubleCreditCostState] = useState<{
+    workspaceId: string;
+    enabled: boolean | null;
+    loading: boolean;
+    error: string;
+  }>({
+    workspaceId,
+    enabled: null,
+    loading: mode === "manage" && isOwner,
+    error: "",
+  });
+  const [doubleCreditCostSaving, setDoubleCreditCostSaving] = useState(false);
   const initialLoadsRef = useRef(
     new Map<
       string,
@@ -120,6 +136,89 @@ export default function WorkspaceAccessDialog({
       cancelled = true;
     };
   }, [mode, workspaceId]);
+
+  useEffect(() => {
+    if (mode !== "manage" || !isOwner) return;
+
+    let cancelled = false;
+    void getWorkspaceDoublePremiumCreditCost(workspaceId)
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setDoubleCreditCostState({
+            workspaceId,
+            enabled: null,
+            loading: false,
+            error: result.error,
+          });
+          return;
+        }
+        setDoubleCreditCostState({
+          workspaceId,
+          enabled: result.data.enabled,
+          loading: false,
+          error: "",
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDoubleCreditCostState({
+            workspaceId,
+            enabled: null,
+            loading: false,
+            error: "Unable to load the premium credit setting. Please try again.",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, mode, workspaceId]);
+
+  const settingForWorkspace =
+    doubleCreditCostState.workspaceId === workspaceId
+      ? doubleCreditCostState
+      : null;
+  const doubleCreditCost = settingForWorkspace?.enabled ?? null;
+  const doubleCreditCostLoading = settingForWorkspace?.loading ?? true;
+  const doubleCreditCostError = settingForWorkspace?.error ?? "";
+
+  const toggleDoubleCreditCost = async () => {
+    if (doubleCreditCost === null || doubleCreditCostSaving) return;
+    setDoubleCreditCostSaving(true);
+    try {
+      const result = await setWorkspaceDoublePremiumCreditCost(
+        workspaceId,
+        !doubleCreditCost,
+      );
+      if ("error" in result) {
+        setDoubleCreditCostState((current) =>
+          current.workspaceId === workspaceId
+            ? { ...current, error: result.error }
+            : current,
+        );
+        return;
+      }
+      setDoubleCreditCostState((current) =>
+        current.workspaceId === workspaceId
+          ? { ...current, enabled: result.data.enabled, error: "" }
+          : current,
+      );
+    } catch {
+      setDoubleCreditCostState((current) =>
+        current.workspaceId === workspaceId
+          ? {
+              ...current,
+              error:
+                "Unable to update the premium credit setting. Please try again.",
+            }
+          : current,
+      );
+    } finally {
+      setDoubleCreditCostSaving(false);
+    }
+  };
 
   const submitInvite = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -272,8 +371,8 @@ export default function WorkspaceAccessDialog({
               </p>
             )}
             <section
-              aria-label="Workspace AI credits"
-              className="mb-4 rounded-md  bg-black/5 p-2 px-3"
+              aria-label="Workspace AI credits and premium model usage"
+              className="mb-4 rounded bg-black/5 p-2 px-3"
             >
               <button
                 disabled={creditLoading}
@@ -282,7 +381,7 @@ export default function WorkspaceAccessDialog({
               >
                 <div>
                   <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
-                    Workspace AI credits
+                    Workspace credits
                   </p>
                 </div>
 
@@ -316,6 +415,52 @@ export default function WorkspaceAccessDialog({
               >
                 Refresh balance
               </button>
+              {isOwner && (
+                <div className="mt-4 flex items-center justify-between gap-3 pt-2">
+                  <div className="min-w-0">
+                    <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-">
+                      Extra Usage
+                    </p>
+                    <p className="geist text-left text-[10px] font-medium leading-4 tracking-tight text-[#999]">
+                      After the included limit, charge 2 credits per premium
+                      request
+                    </p>
+                    {doubleCreditCostError && (
+                      <p
+                        className="mt-1 text-[11px] font-medium tracking-tight text-[#b42318]"
+                        role="alert"
+                      >
+                        {doubleCreditCostError}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    aria-checked={doubleCreditCost ?? false}
+                    aria-label="Double workspace credit usage for premium models"
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full p-0 transition-colors duration-200 ease-in-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#536346] disabled:cursor-not-allowed disabled:opacity-50 ${
+                      doubleCreditCost
+                        ? "bg-[#536346] hover:bg-[#475839]"
+                        : "bg-[#c6c9c2] hover:bg-[#b8bbb4]"
+                    }`}
+                    disabled={
+                      doubleCreditCostLoading ||
+                      doubleCreditCostSaving ||
+                      doubleCreditCost === null
+                    }
+                    onClick={() => void toggleDoubleCreditCost()}
+                    role="switch"
+                    type="button"
+                  >
+                    <span
+                      className={`pointer-events-none absolute left-0 top-1/2 size-5 -translate-y-1/2 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${
+                        doubleCreditCost
+                          ? "translate-x-[22px]"
+                          : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
             </section>
             {loading ? (
               <p className="py-8 text-center tracking-tight font-medium text-sm text-[#999]">

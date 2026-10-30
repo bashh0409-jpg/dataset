@@ -15,6 +15,7 @@ import {
   PanelRightOpen,
   Pause,
   Play,
+  RotateCw,
   Settings,
   Trash2,
   Table2,
@@ -79,6 +80,10 @@ type TextAttachment = {
   name: string;
   contents: string;
   size: number;
+};
+type FailedGeneration = {
+  messages: ConversationMessage[];
+  conversationId: string | null;
 };
 type GeneratorMode = "agent" | "manual";
 type GenerationPhase = "analyzing" | "generating" | "finalizing";
@@ -178,6 +183,8 @@ export default function GeneratorPanel({
   const [view, setView] = useState<DataView>("table");
   const [showDataPanel, setShowDataPanel] = useState(true);
   const [error, setError] = useState("");
+  const [failedGeneration, setFailedGeneration] =
+    useState<FailedGeneration | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generationPhase, setGenerationPhase] =
     useState<GenerationPhase>("analyzing");
@@ -1696,37 +1703,12 @@ export default function GeneratorPanel({
     setError("");
   };
 
-  const generate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const userPrompt = prompt.trim();
-    const userMessage =
-      userPrompt ||
-      (textAttachment
-        ? `Use the attached text file "${textAttachment.name}" to design the schema.`
-        : "");
-    if (!canSubmitPrompt || generating) return;
-
-    const contextMessages: ConversationMessage[] = conversation.map((message) => {
-      if (!textAttachment || !message.attachmentContents) {
-        return message;
-      }
-      return { ...message, attachmentContents: undefined };
-    });
-    const messages: ConversationMessage[] = [
-      ...contextMessages,
-      {
-        role: "user" as const,
-        content: userMessage,
-        ...(textAttachment
-          ? {
-              attachmentName: textAttachment.name,
-              attachmentSizeBytes: textAttachment.size,
-              attachmentContents: textAttachment.contents,
-            }
-          : {}),
-      },
-    ];
+  const runGeneration = async (
+    messages: ConversationMessage[],
+    existingConversationId: string | null,
+  ) => {
     const modelMessages = includeTextAttachmentsInMessages(messages.slice(-8));
+    setFailedGeneration(null);
     pendingConversationScrollRef.current = "smooth";
     setConversation(messages);
     setPrompt("");
@@ -1742,9 +1724,11 @@ export default function GeneratorPanel({
       () => setGenerationPhase("generating"),
       900,
     );
+    let retryConversationId = existingConversationId;
 
     try {
-      const savedId = await persistConversation(messages, conversationId);
+      const savedId = await persistConversation(messages, existingConversationId);
+      retryConversationId = savedId ?? existingConversationId;
       const result = await generateWithAi({
         messages: modelMessages,
         model: isPro ? model : "qwen",
@@ -1755,9 +1739,11 @@ export default function GeneratorPanel({
       window.clearTimeout(phaseTimeout);
       if ("error" in result) {
         setError(result.error);
+        setFailedGeneration({ messages, conversationId: retryConversationId });
         return;
       }
 
+      setFailedGeneration(null);
       setGenerationPhase("finalizing");
       await new Promise<void>((resolve) => window.setTimeout(resolve, 300));
 
@@ -1857,10 +1843,56 @@ export default function GeneratorPanel({
       }
     } catch {
       setError("A network error occurred. Please try again.");
+      setFailedGeneration({
+        messages,
+        conversationId: retryConversationId,
+      });
     } finally {
       window.clearTimeout(phaseTimeout);
       setGenerating(false);
     }
+  };
+
+  const generate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const userPrompt = prompt.trim();
+    const userMessage =
+      userPrompt ||
+      (textAttachment
+        ? `Use the attached text file "${textAttachment.name}" to design the schema.`
+        : "");
+    if (!canSubmitPrompt || generating) return;
+
+    const contextMessages: ConversationMessage[] = conversation.map((message) => {
+      if (!textAttachment || !message.attachmentContents) {
+        return message;
+      }
+      return { ...message, attachmentContents: undefined };
+    });
+    const messages: ConversationMessage[] = [
+      ...contextMessages,
+      {
+        role: "user",
+        content: userMessage,
+        ...(textAttachment
+          ? {
+              attachmentName: textAttachment.name,
+              attachmentSizeBytes: textAttachment.size,
+              attachmentContents: textAttachment.contents,
+            }
+          : {}),
+      },
+    ];
+    setFailedGeneration(null);
+    await runGeneration(messages, conversationId);
+  };
+
+  const retryGeneration = () => {
+    if (!failedGeneration || generating) return;
+    void runGeneration(
+      failedGeneration.messages,
+      failedGeneration.conversationId,
+    );
   };
 
   const download = () => {
@@ -2524,7 +2556,7 @@ export default function GeneratorPanel({
                         {generationPhase === "analyzing" &&
                           "Analyzing request…"}
                         {generationPhase === "generating" &&
-                          "Generating dataset…"}
+                          "Processing…"}
                         {generationPhase === "finalizing" &&
                           "Finalizing results…"}
                       </span>
@@ -2554,12 +2586,31 @@ export default function GeneratorPanel({
                 </div>
               )}
               {error && (
-                <p
-                  className="mt-4 rounded border border-[#efd8d4] bg-[#fff9f8] px-3 py-0.5 tracking-tight text-[12px] leading-5 text-[#a64239]"
+                <div
+                  className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-[#efd8d4] bg-[#fff9f8] px-3 py-1.5 text-[12px] leading-5 text-[#a64239]"
                   role="alert"
                 >
-                  {error}
-                </p>
+                  <p className="min-w-0 flex-1">{error}</p>
+                  {failedGeneration && (
+                    <button
+                      aria-label="Retry generation"
+                      className="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 font-semibold text-[#8e3932] transition hover:bg-[#f9eeec] focus-visible:outline-2 focus-visible:outline-[#a64239] disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={generating}
+                      onClick={retryGeneration}
+                      type="button"
+                    >
+                      {generating ? (
+                        <LoaderCircle
+                          aria-hidden="true"
+                          className="size-3 animate-spin"
+                        />
+                      ) : (
+                        <RotateCw aria-hidden="true" className="size-3" />
+                      )}
+                      Retry
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -3142,7 +3193,7 @@ export default function GeneratorPanel({
                     </div>
                     <button
                       aria-label="Auto clean schema layout"
-                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={cleanSchemaLayout}
                       title="Arrange tables to make relationships easier to follow"
                       type="button"
@@ -3159,7 +3210,7 @@ export default function GeneratorPanel({
                     )}
                     <button
                       aria-label="Fit schema to view"
-                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={fitSchemaToView}
                       title="Fit schema to view"
                       type="button"
@@ -3173,7 +3224,7 @@ export default function GeneratorPanel({
                           : "Play relationship animations"
                       }
                       aria-pressed={areSchemaRelationshipsAnimated}
-                      className="flex h-7 items-center gap-1.5 rounded border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={() => {
                         if (areSchemaRelationshipsAnimated) {
                           setAnimatedSchemaTable(null);
@@ -3333,18 +3384,6 @@ export default function GeneratorPanel({
                                         </text>
                                       </g>
                                     </g>
-                                    <circle
-                                      cx={relationship.start.x}
-                                      cy={relationship.start.y}
-                                      fill="#7894a6"
-                                      r="3"
-                                    />
-                                    <circle
-                                      cx={relationship.end.x}
-                                      cy={relationship.end.y}
-                                      fill="#7894a6"
-                                      r="3"
-                                    />
                                   </g>
                                 );
                               })}
@@ -3550,6 +3589,33 @@ export default function GeneratorPanel({
                             </article>
                           ))}
                         </div>
+                        {schemaDiagramSize.width > 0 &&
+                          schemaDiagramSize.height > 0 && (
+                            <svg
+                              aria-hidden="true"
+                              className="pointer-events-none absolute left-0 top-0 z-20"
+                              height={schemaDiagramSize.height}
+                              viewBox={`0 0 ${schemaDiagramSize.width} ${schemaDiagramSize.height}`}
+                              width={schemaDiagramSize.width}
+                            >
+                              {schemaRelationshipPaths.map((relationship) => (
+                                <g key={relationship.key}>
+                                  <circle
+                                    cx={relationship.start.x}
+                                    cy={relationship.start.y}
+                                    fill="#7894a6"
+                                    r="4"
+                                  />
+                                  <circle
+                                    cx={relationship.end.x}
+                                    cy={relationship.end.y}
+                                    fill="#7894a6"
+                                    r="4"
+                                  />
+                                </g>
+                              ))}
+                            </svg>
+                          )}
                       </div>
                     </div>
                   </div>

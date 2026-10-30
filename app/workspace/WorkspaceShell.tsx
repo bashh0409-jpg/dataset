@@ -760,12 +760,6 @@ export default function WorkspaceShell({
             type="button"
           >
             <span className="truncate text-[12px] font-medium tracking-[-0.02em] text-[#777a72] max-[640px]:sr-only">
-              <span
-                aria-hidden="true"
-                className={`mr-1.5 inline-block size-1.5 rounded-full align-middle ${
-                  chat.color ? conversationColorClasses[chat.color] : ""
-                }`}
-              />
               {chat.title}
             </span>
           </button>
@@ -802,13 +796,35 @@ export default function WorkspaceShell({
               role="menu"
             >
               <button
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#555752] hover:bg-[#f4f5f1]"
+                className="flex w-full items-center gap-2  rounded px-2 py-1.5 text-left text-[11px] text-[#555752] hover:bg-[#f4f5f1]"
                 onClick={() => beginRenameChat(chat)}
                 role="menuitem"
                 type="button"
               >
                 <Pencil aria-hidden="true" className="size-3.5" />
                 Rename
+              </button>
+              <button
+                aria-label={
+                  chat.label === "important"
+                    ? "Remove important label"
+                    : "Label conversation as important"
+                }
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#555752] hover:bg-[#f4f5f1] disabled:opacity-50"
+                disabled={updatingChatId === chat.id}
+                onClick={() => {
+                  setOpenChatMenuId(null);
+                  void updateConversationMetadata(chat, {
+                    label: chat.label === "important" ? null : "important",
+                  });
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <Tag aria-hidden="true" className="size-3.5" />
+                {chat.label === "important"
+                  ? "Remove label"
+                  : "Label"}
               </button>
               <button
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-[#555752] hover:bg-[#f4f5f1] disabled:opacity-50"
@@ -1408,39 +1424,8 @@ export default function WorkspaceShell({
           workspaceCreditBalance={activeWorkspace?.creditBalance ?? 0}
           workspaceId={activeWorkspace?.id ?? ""}
           model={effectiveAiModel}
-          onArchiveConversation={() =>
-            activeConversation
-              ? toggleChatArchived(activeConversation)
-              : Promise.resolve()
-          }
-          onColorConversation={(color) =>
-            activeConversation
-              ? updateConversationMetadata(activeConversation, { color })
-              : Promise.resolve()
-          }
-          onDeleteConversation={() =>
-            activeConversation
-              ? removeChat(activeConversation)
-              : Promise.resolve()
-          }
-          canDeleteConversation={canDeleteConversations}
           onExportConversation={exportConversation}
-          onLabelConversation={(label) =>
-            activeConversation
-              ? updateConversationMetadata(activeConversation, { label })
-              : Promise.resolve()
-          }
           onModelChange={setAiModel}
-          onPinConversation={() =>
-            activeConversation
-              ? toggleChatPinned(activeConversation)
-              : Promise.resolve()
-          }
-          onRenameConversation={(title) =>
-            activeConversation
-              ? renameConversation(activeConversation, title)
-              : Promise.resolve()
-          }
           onManage={() => setAccessDialog("manage")}
           onInvite={() => {
             if (activeWorkspace?.role === "owner") {

@@ -1,9 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import Hero from "./components/Hero";
+import LandingSignIn from "./components/LandingSignIn";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import Navbar from "./components/Navbar";
 
 export default function Page() {
   return (
@@ -26,17 +25,11 @@ async function HomeContent() {
   }
 
   return (
-    <div>
-      <Navbar />
-      <Hero />
-      <section
-        data-nav-theme="white"
-        className="h-full min-h-screen w-full bg-white"
-      ></section>
-      <section
-        data-nav-theme="black"
-        className="h-full min-h-screen w-full bg-black"
-      ></section>
+    <div className="min-h-screen flex flex-col w-full items-center justify-center">
+      <h1 className="mb-3 text-3xl font-semibold capitalize tracking-tighter">
+        Synthetic
+      </h1>
+      <LandingSignIn />
     </div>
   );
 }

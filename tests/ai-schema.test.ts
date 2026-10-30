@@ -124,6 +124,24 @@ describe("AI-generated schema parsing", () => {
     });
   });
 
+  it("treats a plain-text model question as a clarification", () => {
+    const result = parseAiSchema(
+      "Which fields should each product include?",
+      0,
+    );
+
+    expect(result).toEqual({
+      status: "clarification",
+      question: "Which fields should each product include?",
+    });
+  });
+
+  it("explains how to recover when the model returns prose instead of a schema", () => {
+    expect(() => parseAiSchema("I can help with that.", 0)).toThrow(
+      "The AI response didn't include a schema. Please retry or describe the tables and fields more directly.",
+    );
+  });
+
   it("asks for the record count when a ready response contains fields but no count", () => {
     const result = parseAiSchema(
       JSON.stringify({

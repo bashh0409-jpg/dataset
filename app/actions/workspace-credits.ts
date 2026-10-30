@@ -54,3 +54,76 @@ export async function getWorkspaceCreditBalance(
 
   return { data: { balance: workspaceCredit.credit_balance } };
 }
+
+export async function getWorkspaceDoublePremiumCreditCost(
+  input: unknown,
+): Promise<{ data: { enabled: boolean } } | { error: string }> {
+  const parsedWorkspaceId = workspaceIdSchema.safeParse(input);
+  if (!parsedWorkspaceId.success) {
+    return { error: "Select a valid workspace to view its credit setting." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { error: "Please sign in again to view workspace settings." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "get_workspace_double_premium_credit_cost",
+    { p_workspace_id: parsedWorkspaceId.data },
+  );
+  if (error) {
+    return { error: "Unable to load the premium credit setting. Please try again." };
+  }
+
+  const enabled = z.boolean().safeParse(data);
+  if (!enabled.success) {
+    return { error: "Workspace returned an invalid premium credit setting." };
+  }
+
+  return { data: { enabled: enabled.data } };
+}
+
+export async function setWorkspaceDoublePremiumCreditCost(
+  workspaceIdInput: unknown,
+  enabledInput: unknown,
+): Promise<{ data: { enabled: boolean } } | { error: string }> {
+  const parsedWorkspaceId = workspaceIdSchema.safeParse(workspaceIdInput);
+  const enabled = z.boolean().safeParse(enabledInput);
+  if (!parsedWorkspaceId.success || !enabled.success) {
+    return { error: "Choose a valid workspace credit setting." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { error: "Please sign in again to update workspace settings." };
+  }
+
+  const { data, error } = await supabase.rpc(
+    "set_workspace_double_premium_credit_cost",
+    {
+      p_workspace_id: parsedWorkspaceId.data,
+      p_enabled: enabled.data,
+    },
+  );
+  if (error) {
+    return {
+      error: "Unable to update the premium credit setting. Please try again.",
+    };
+  }
+
+  const updatedSetting = z.boolean().safeParse(data);
+  if (!updatedSetting.success) {
+    return { error: "Workspace returned an invalid premium credit setting." };
+  }
+
+  return { data: { enabled: updatedSetting.data } };
+}

@@ -181,7 +181,14 @@ function extractJsonObject(content: string) {
     return JSON.parse(text);
   } catch {
     const start = text.indexOf("{");
-    if (start === -1) throw new Error("The AI response did not contain a JSON schema.");
+    if (start === -1) {
+      if (text.length <= 300 && text.endsWith("?")) {
+        return { status: "clarification", question: text };
+      }
+      throw new Error(
+        "The AI response didn't include a schema. Please retry or describe the tables and fields more directly.",
+      );
+    }
 
     let depth = 0;
     let inString = false;
