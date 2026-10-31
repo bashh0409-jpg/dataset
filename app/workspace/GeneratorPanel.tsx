@@ -8,9 +8,10 @@ import {
   Check,
   Copy,
   Download,
+  Expand,
   LoaderCircle,
-  Maximize2,
   MessageSquareText,
+  Pencil,
   PanelRightClose,
   PanelRightOpen,
   Pause,
@@ -19,6 +20,10 @@ import {
   Settings,
   Trash2,
   Table2,
+  Scan,
+  Shrink,
+  ThumbsDown,
+  ThumbsUp,
   ZoomIn,
   ZoomOut,
   Key,
@@ -38,6 +43,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   getAiConversation,
+  editAiConversationAfterMessage,
   saveAiGeneratedArtifact,
   saveAiGeneratedArtifactPositions,
   saveAiConversation,
@@ -181,7 +187,12 @@ export default function GeneratorPanel({
   const [composerAttachmentFlyoutOpen, setComposerAttachmentFlyoutOpen] =
     useState(false);
   const [view, setView] = useState<DataView>("table");
+  const [isSchemaExpanded, setIsSchemaExpanded] = useState(false);
   const [showDataPanel, setShowDataPanel] = useState(true);
+  const changeDataView = (nextView: DataView) => {
+    setView(nextView);
+    if (nextView !== "schema") setIsSchemaExpanded(false);
+  };
   const [error, setError] = useState("");
   const [failedGeneration, setFailedGeneration] =
     useState<FailedGeneration | null>(null);
@@ -192,6 +203,11 @@ export default function GeneratorPanel({
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(
     null,
   );
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(
+    null,
+  );
+  const [editedMessageContent, setEditedMessageContent] = useState("");
+  const [savingMessageEdit, setSavingMessageEdit] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const conversationScrollRef = useRef<HTMLDivElement>(null);
   const pendingConversationScrollRef = useRef<ScrollBehavior | null>(null);
@@ -217,7 +233,6 @@ export default function GeneratorPanel({
   );
   const schemaPinchRef = useRef<{
     distance: number;
-    zoom: number;
     canvasX: number;
     canvasY: number;
   } | null>(null);
@@ -275,6 +290,23 @@ export default function GeneratorPanel({
     string | null
   >(null);
   const schemaTableAnimationTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isSchemaExpanded) return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsSchemaExpanded(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSchemaExpanded]);
+
   const [schemaRelationshipPaths, setSchemaRelationshipPaths] = useState<
     {
       key: string;
@@ -762,7 +794,6 @@ export default function GeneratorPanel({
           const viewportBounds = viewport.getBoundingClientRect();
           schemaPinchRef.current = {
             distance: Math.hypot(second.x - first.x, second.y - first.y),
-            zoom: schemaZoomRef.current,
             canvasX:
               (viewport.scrollLeft + midpointX - viewportBounds.left) /
               schemaZoomRef.current,
@@ -818,12 +849,14 @@ export default function GeneratorPanel({
         const midpointY = (first.y + second.y) / 2 - viewportBounds.top;
 
         applySchemaZoom(
-          pinch.zoom * (distance / pinch.distance),
+          schemaZoomRef.current * Math.pow(distance / pinch.distance, 1.7),
           pinch.canvasX,
           pinch.canvasY,
           midpointX,
           midpointY,
+          false,
         );
+        pinch.distance = distance;
         return;
       }
 
@@ -1586,6 +1619,7 @@ export default function GeneratorPanel({
           return;
         }
         setConversationId(result.data.id);
+        setEditingMessageIndex(null);
         pendingConversationScrollRef.current = "auto";
         const messages = result.data.messages.map((message) => ({
           ...message,
@@ -1598,7 +1632,7 @@ export default function GeneratorPanel({
         setDataset(null);
         setGeneratedTables([]);
         resetSchemaCanvas();
-        setView("table");
+        changeDataView("table");
         setError("");
         setSaveError("");
         onConversationOpened(result.data.id);
@@ -1685,9 +1719,10 @@ export default function GeneratorPanel({
     resetSchemaCanvas();
     setArtifacts([]);
     setConversation([]);
+    setEditingMessageIndex(null);
     setTextAttachment(null);
     setConversationId(null);
-    setView("table");
+    changeDataView("table");
     setCopied(false);
   };
 
@@ -1774,7 +1809,7 @@ export default function GeneratorPanel({
       resetSchemaCanvas();
       setDataset(datasets[0] ?? null);
       setShowDataPanel(true);
-      setView("table");
+      changeDataView("table");
       setCopied(false);
       const tableSummary = tables
         .map(
@@ -1893,6 +1928,95 @@ export default function GeneratorPanel({
       failedGeneration.messages,
       failedGeneration.conversationId,
     );
+  };
+
+  const retryMessage = async (
+    messageIndex: number,
+    replacementContent?: string,
+  ) => {
+    if (generating || savingMessageEdit) return;
+
+    let userMessageIndex = messageIndex;
+    if (conversation[messageIndex]?.role === "assistant") {
+      userMessageIndex = messageIndex - 1;
+      while (
+        userMessageIndex >= 0 &&
+        conversation[userMessageIndex]?.role !== "user"
+      ) {
+        userMessageIndex -= 1;
+      }
+    }
+
+    const userMessage = conversation[userMessageIndex];
+    if (!userMessage || userMessage.role !== "user") {
+      setError("There isn't a user request available to retry.");
+      return;
+    }
+    if (userMessage.attachmentName && !userMessage.attachmentContents) {
+      setError(
+        `Reattach "${userMessage.attachmentName}" before retrying this request.`,
+      );
+      return;
+    }
+
+    const content = replacementContent?.trim() ?? userMessage.content;
+    if (!content) {
+      setError("Enter a message before saving your edit.");
+      return;
+    }
+
+    const updatedMessages = conversation
+      .slice(0, userMessageIndex + 1)
+      .map((message, index) =>
+        index === userMessageIndex ? { ...message, content } : message,
+      );
+    const artifactIds = [
+      ...new Set(
+        conversation
+          .slice(userMessageIndex + 1)
+          .flatMap((message) => [
+            ...(message.generatedArtifactId
+              ? [message.generatedArtifactId]
+              : []),
+            ...(message.generatedArtifactIds ?? []),
+          ]),
+      ),
+    ];
+
+    setError("");
+    setSaveError("");
+    setSavingMessageEdit(true);
+    try {
+      let updatedConversationId = conversationId;
+      if (updatedConversationId) {
+        const result = await editAiConversationAfterMessage({
+          id: updatedConversationId,
+          workspaceId,
+          messages: updatedMessages,
+          artifactIds,
+        });
+        if ("error" in result) {
+          setSaveError(result.error);
+          return;
+        }
+        updatedConversationId = result.data.id;
+        onChatSaved(result.data);
+      }
+
+      setConversation(updatedMessages);
+      setEditingMessageIndex(null);
+      setArtifacts((current) =>
+        current.filter((artifact) => !artifactIds.includes(artifact.id)),
+      );
+      setDataset(null);
+      setGeneratedTables([]);
+      resetSchemaCanvas();
+      await runGeneration(updatedMessages, updatedConversationId);
+    } catch {
+      setSaveError("A network error occurred while updating this chat.");
+    } finally {
+      setSavingMessageEdit(false);
+    }
   };
 
   const download = () => {
@@ -2097,7 +2221,7 @@ export default function GeneratorPanel({
                         : "font-medium text-[#666961] hover:bg-white/60 hover:text-[#252721]"
                     }`}
                     key={format}
-                    onClick={() => setView(format)}
+                    onClick={() => changeDataView(format)}
                     role="tab"
                     type="button"
                   >
@@ -2138,7 +2262,7 @@ export default function GeneratorPanel({
                       ? "bg-white font-medium text-[#252721]"
                       : "font-medium text-[#666961] hover:bg-white/60 hover:text-[#252721]"
                   }`}
-                  onClick={() => setView("schema")}
+                  onClick={() => changeDataView("schema")}
                   role="tab"
                   type="button"
                 >
@@ -2279,21 +2403,51 @@ export default function GeneratorPanel({
 
                     return (
                       <div
-                        className={`group flex max-w-full items-start gap-1 ${
-                          message.role === "user"
-                            ? "ml-auto flex-row-reverse"
-                            : "mr-auto"
+                        className={`group grid min-w-0 w-full max-w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] ${
+                          editingMessageIndex === index
+                            ? "ml-auto"
+                            : message.role === "user"
+                              ? "ml-auto"
+                              : "mr-auto"
                         }`}
                         key={`${index}-${message.role}`}
                       >
                         <div
-                          className={`max-w-[min(88%,460px)] rounded-2xl border border-[#d1d5cd] px-2 py-2 text-[13px] leading-tight ${
+                          className={`col-start-1 row-start-1 rounded-2xl border border-[#d1d5cd] px-2 py-2 text-[13px] leading-tight ${
+                            editingMessageIndex === index
+                              ? "w-full max-w-[min(88%,460px)]"
+                              : "max-w-[min(88%,460px)]"
+                          } ${
                             message.role === "user"
-                              ? "bg-gradient-to-r from-[#e7f2e4] to-[#f0ebf5] text-[#292c27]"
-                              : "rounded border-none bg-transparent text-[#30332d]"
+                              ? "justify-self-end bg-gradient-to-r w-fit from-[#e7f2e4] to-[#f0ebf5] text-[#292c27]"
+                              : "justify-self-start rounded border-none bg-transparent text-[#30332d]"
                           }`}
                         >
-                          {message.content}
+                          {editingMessageIndex === index ? (
+                            <form
+                              id={`edit-message-${index}`}
+                              className="w-full min-w-0"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void retryMessage(index, editedMessageContent);
+                              }}
+                            >
+                              <textarea
+                                aria-label="Edit your message"
+                                autoFocus
+                                className="field-sizing-content min-h-20 max-h-80 w-full min-w-0 max-w-full resize-none overflow-y-auto rounded-md bg-white/80 p-2 text-[13px] leading-5 outline-none focus-visible:border-[#858780]"
+                                maxLength={4_000}
+                                onChange={(event) =>
+                                  setEditedMessageContent(
+                                    event.currentTarget.value,
+                                  )
+                                }
+                                value={editedMessageContent}
+                              />
+                            </form>
+                          ) : (
+                            message.content
+                          )}
                           {message.role === "assistant" &&
                             message.modelUsed && (
                               <p
@@ -2432,114 +2586,231 @@ export default function GeneratorPanel({
                             </div>
                           )}
                         </div>
-                        <button
-                          aria-label={
-                            copiedMessageIndex === index
-                              ? "Message copied"
-                              : `Copy ${message.role} message`
-                          }
-                          className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                          onClick={() =>
-                            void copyMessage(message.content, index)
-                          }
-                          title={
-                            copiedMessageIndex === index
-                              ? "Copied"
-                              : "Copy message"
-                          }
-                          type="button"
+                        <div
+                          className={`col-start-1 row-start-2 mt-0.5 flex shrink-0 items-center gap-0.5 ${
+                            editingMessageIndex === index
+                              ? "justify-self-end"
+                              : message.role === "user"
+                                ? "justify-self-end"
+                                : "justify-self-start"
+                          }`}
                         >
-                          {copiedMessageIndex === index ? (
-                            <Check aria-hidden="true" className="size-3.5" />
+                          {editingMessageIndex === index ? (
+                            <>
+                              <button
+                                className="rounded px-2 mr-1 py-1 text-[10px] font-medium text-[#686a64] transition hover:bg-white/70 disabled:opacity-50"
+                                disabled={savingMessageEdit || generating}
+                                onClick={() => {
+                                  setEditingMessageIndex(null);
+                                  setError("");
+                                }}
+                                type="button"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                className="rounded bg-[#252721]  px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-[#41433c] disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={
+                                  savingMessageEdit ||
+                                  generating ||
+                                  !editedMessageContent.trim()
+                                }
+                                form={`edit-message-${index}`}
+                                type="submit"
+                              >
+                                {savingMessageEdit ? "Saving…" : "Save"}
+                              </button>
+                            </>
                           ) : (
-                            <Copy aria-hidden="true" className="size-3.5" />
+                            <>
+                              <button
+                                aria-label={
+                                  copiedMessageIndex === index
+                                    ? "Message copied"
+                                    : `Copy ${message.role} message`
+                                }
+                                className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                onClick={() =>
+                                  void copyMessage(message.content, index)
+                                }
+                                title={
+                                  copiedMessageIndex === index
+                                    ? "Copied"
+                                    : "Copy message"
+                                }
+                                type="button"
+                              >
+                                {copiedMessageIndex === index ? (
+                                  <Check
+                                    aria-hidden="true"
+                                    className="size-3.5"
+                                  />
+                                ) : (
+                                  <Copy
+                                    aria-hidden="true"
+                                    className="size-3.5"
+                                  />
+                                )}
+                              </button>
+                              <button
+                                aria-label={
+                                  message.role === "user"
+                                    ? "Retry this request"
+                                    : "Retry the response"
+                                }
+                                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                disabled={generating || savingMessageEdit}
+                                onClick={() => void retryMessage(index)}
+                                title={
+                                  message.role === "user"
+                                    ? "Retry this request"
+                                    : "Retry this response"
+                                }
+                                type="button"
+                              >
+                                <RotateCw
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                              </button>
+                              {message.role === "assistant" && (
+                                <>
+                                  <button
+                                    aria-label="Good response"
+                                    className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858780] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                    title="Good response"
+                                    type="button"
+                                  >
+                                    <ThumbsUp
+                                      aria-hidden="true"
+                                      className="size-3.5"
+                                    />
+                                  </button>
+                                  <button
+                                    aria-label="Bad response"
+                                    className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858780] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                    title="Bad response"
+                                    type="button"
+                                  >
+                                    <ThumbsDown
+                                      aria-hidden="true"
+                                      className="size-3.5"
+                                    />
+                                  </button>
+                                </>
+                              )}
+                              {message.role === "user" && (
+                                <button
+                                  aria-label="Edit message"
+                                  className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[#858880] transition hover:bg-white/70 hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858880] disabled:cursor-not-allowed disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                  disabled={generating || savingMessageEdit}
+                                  onClick={() => {
+                                    setEditedMessageContent(message.content);
+                                    setEditingMessageIndex(index);
+                                    setError("");
+                                  }}
+                                  title="Edit message"
+                                  type="button"
+                                >
+                                  <Pencil
+                                    aria-hidden="true"
+                                    className="size-3.5"
+                                  />
+                                </button>
+                              )}
+                            </>
                           )}
-                        </button>
-                        {(linkedArtifact || currentDatasetMatchesMessage) && (
-                          <button
-                            aria-label="Open generated dataset"
-                            className="mt-0.5 flex h-7 shrink-0 items-center justify-center gap-1 rounded-md bg-white px-2 text-[10px] font-medium text-[#55584f] shadow-xs transition hover:bg-[#f5f7f3] hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858780]"
-                            onClick={() => {
-                              if (linkedArtifact) {
-                                const linkedDatasets = artifacts
-                                  .filter((artifact) =>
-                                    message.generatedArtifactIds
-                                      ? message.generatedArtifactIds.includes(
-                                          artifact.id,
-                                        )
-                                      : matchesDatasetMessage(
-                                          artifact.name,
-                                          artifact.count,
-                                        ),
-                                  )
-                                  .map((artifact) => ({
-                                    name: artifact.name,
-                                    fields: artifact.fields,
-                                    records: artifact.records,
-                                    count: artifact.count,
-                                    seed: artifact.seed,
-                                    artifactId: artifact.id,
-                                  }));
-                                setGeneratedTables(
-                                  linkedDatasets.length > 1
-                                    ? linkedDatasets
-                                    : [
-                                        {
-                                          name: linkedArtifact.name,
-                                          fields: linkedArtifact.fields,
-                                          records: linkedArtifact.records,
-                                          count: linkedArtifact.count,
-                                          seed: linkedArtifact.seed,
-                                          artifactId: linkedArtifact.id,
-                                        },
-                                      ],
-                                );
-                                resetSchemaCanvas();
-                                const openedArtifacts =
-                                  linkedDatasets.length > 1
-                                    ? linkedDatasets
-                                    : [
-                                        {
-                                          name: linkedArtifact.name,
-                                          fields: linkedArtifact.fields,
-                                          records: linkedArtifact.records,
-                                          count: linkedArtifact.count,
-                                          seed: linkedArtifact.seed,
-                                          artifactId: linkedArtifact.id,
-                                        },
-                                      ];
-                                setSchemaTablePositions(
-                                  Object.fromEntries(
-                                    openedArtifacts.flatMap((artifact) => {
-                                      const savedPosition = artifacts.find(
-                                        (candidate) =>
-                                          candidate.id === artifact.artifactId,
-                                      )?.canvasPosition;
-                                      return savedPosition
-                                        ? [[artifact.name, savedPosition]]
-                                        : [];
-                                    }),
-                                  ),
-                                );
-                                setDataset({
-                                  name: linkedArtifact.name,
-                                  fields: linkedArtifact.fields,
-                                  records: linkedArtifact.records,
-                                  count: linkedArtifact.count,
-                                  seed: linkedArtifact.seed,
-                                  artifactId: linkedArtifact.id,
-                                });
-                              }
-                              setShowDataPanel(true);
-                              setView("table");
-                              setError("");
-                            }}
-                            title="Open generated dataset in Data panel"
-                            type="button"
-                          >
-                            <FileText aria-hidden="true" className="size-3.5" />
-                          </button>
-                        )}
+                        </div>
+                        {editingMessageIndex !== index &&
+                          (linkedArtifact || currentDatasetMatchesMessage) && (
+                            <button
+                              aria-label="Open generated dataset"
+                              className="col-start-2 row-start-1 mt-0.5 flex h-7 shrink-0 items-center justify-self-end gap-1 rounded-md bg-white px-2 text-[10px] font-medium text-[#55584f] shadow-xs transition hover:bg-[#f5f7f3] hover:text-[#252721] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                              onClick={() => {
+                                if (linkedArtifact) {
+                                  const linkedDatasets = artifacts
+                                    .filter((artifact) =>
+                                      message.generatedArtifactIds
+                                        ? message.generatedArtifactIds.includes(
+                                            artifact.id,
+                                          )
+                                        : matchesDatasetMessage(
+                                            artifact.name,
+                                            artifact.count,
+                                          ),
+                                    )
+                                    .map((artifact) => ({
+                                      name: artifact.name,
+                                      fields: artifact.fields,
+                                      records: artifact.records,
+                                      count: artifact.count,
+                                      seed: artifact.seed,
+                                      artifactId: artifact.id,
+                                    }));
+                                  setGeneratedTables(
+                                    linkedDatasets.length > 1
+                                      ? linkedDatasets
+                                      : [
+                                          {
+                                            name: linkedArtifact.name,
+                                            fields: linkedArtifact.fields,
+                                            records: linkedArtifact.records,
+                                            count: linkedArtifact.count,
+                                            seed: linkedArtifact.seed,
+                                            artifactId: linkedArtifact.id,
+                                          },
+                                        ],
+                                  );
+                                  resetSchemaCanvas();
+                                  const openedArtifacts =
+                                    linkedDatasets.length > 1
+                                      ? linkedDatasets
+                                      : [
+                                          {
+                                            name: linkedArtifact.name,
+                                            fields: linkedArtifact.fields,
+                                            records: linkedArtifact.records,
+                                            count: linkedArtifact.count,
+                                            seed: linkedArtifact.seed,
+                                            artifactId: linkedArtifact.id,
+                                          },
+                                        ];
+                                  setSchemaTablePositions(
+                                    Object.fromEntries(
+                                      openedArtifacts.flatMap((artifact) => {
+                                        const savedPosition = artifacts.find(
+                                          (candidate) =>
+                                            candidate.id ===
+                                            artifact.artifactId,
+                                        )?.canvasPosition;
+                                        return savedPosition
+                                          ? [[artifact.name, savedPosition]]
+                                          : [];
+                                      }),
+                                    ),
+                                  );
+                                  setDataset({
+                                    name: linkedArtifact.name,
+                                    fields: linkedArtifact.fields,
+                                    records: linkedArtifact.records,
+                                    count: linkedArtifact.count,
+                                    seed: linkedArtifact.seed,
+                                    artifactId: linkedArtifact.id,
+                                  });
+                                }
+                                setShowDataPanel(true);
+                                changeDataView("table");
+                                setError("");
+                              }}
+                              title="Open generated dataset in Data panel"
+                              type="button"
+                            >
+                              <FileText
+                                aria-hidden="true"
+                                className="size-3.5"
+                              />
+                            </button>
+                          )}
                       </div>
                     );
                   })}
@@ -2812,6 +3083,18 @@ export default function GeneratorPanel({
                   id="dataset-prompt"
                   maxLength={maxPromptLength}
                   onChange={(event) => setPrompt(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key !== "Enter" ||
+                      event.shiftKey ||
+                      event.nativeEvent.isComposing
+                    ) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }}
                   onPaste={handlePromptPaste}
                   placeholder="Describe a scenario and the data your app needs..."
                   ref={promptInputRef}
@@ -3031,7 +3314,11 @@ export default function GeneratorPanel({
         {showDataPanel && (
           <section
             aria-label="Generated data"
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white"
+            className={`flex min-h-0 min-w-0 flex-col overflow-hidden bg-white ${
+              isSchemaExpanded
+                ? "fixed inset-3 z-[100] rounded-lg border border-[#dfe3dd] shadow-xl"
+                : ""
+            }`}
           >
             {generatedTables.length > 1 && dataset && (
               <div className="flex h-fit py-0.5 shrink-0 items-center gap-2 border-b border-[#eff0ec] px-3">
@@ -3051,7 +3338,7 @@ export default function GeneratorPanel({
                         key={table.name}
                         onClick={() => {
                           setDataset(table);
-                          setView("table");
+                          changeDataView("table");
                           setCopied(false);
                         }}
                         type="button"
@@ -3108,7 +3395,7 @@ export default function GeneratorPanel({
                 </div>
               ) : view === "schema" ? (
                 <div className="relative h-full min-h-0 w-full overflow-hidden">
-                  <div className="absolute left-3 top-3 z-30 flex flex-wrap items-center gap-2">
+                  <div className="absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-1 pr-9">
                     <div
                       aria-label="Relationship line style"
                       className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
@@ -3215,7 +3502,32 @@ export default function GeneratorPanel({
                       title="Fit schema to view"
                       type="button"
                     >
-                      <Maximize2 aria-hidden="true" className="size-3.5" />
+                      <Scan aria-hidden="true" className="size-3.5" />
+                    </button>
+                    <button
+                      aria-controls="schema-relationship-diagram"
+                      aria-expanded={isSchemaExpanded}
+                      aria-label={
+                        isSchemaExpanded
+                          ? "Exit expanded schema view"
+                          : "View schema in a larger view"
+                      }
+                      className="absolute right-0 top-0 flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      onClick={() =>
+                        setIsSchemaExpanded((expanded) => !expanded)
+                      }
+                      title={
+                        isSchemaExpanded
+                          ? "Exit expanded schema view"
+                          : "View schema in a larger view"
+                      }
+                      type="button"
+                    >
+                      {isSchemaExpanded ? (
+                        <Shrink aria-hidden="true" className="size-3.5" />
+                      ) : (
+                        <Expand aria-hidden="true" className="size-3.5" />
+                      )}
                     </button>
                     <button
                       aria-label={
@@ -3252,6 +3564,7 @@ export default function GeneratorPanel({
                     className={`absolute inset-0 touch-none overflow-auto overscroll-contain ${
                       isSchemaPanning ? "cursor-grabbing" : "cursor-grab"
                     }`}
+                    id="schema-relationship-diagram"
                     onPointerCancel={handleSchemaCanvasPointerEnd}
                     onPointerDown={handleSchemaCanvasPointerDown}
                     onPointerMove={handleSchemaCanvasPointerMove}

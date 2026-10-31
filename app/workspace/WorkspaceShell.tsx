@@ -52,6 +52,8 @@ const conversationColorClasses: Record<
   purple: "bg-[#9271b5]",
 };
 
+const activeWorkspaceStorageKey = "synthetic.activeWorkspaceId";
+
 type Workspace = {
   id: string;
   name: string;
@@ -206,6 +208,7 @@ export default function WorkspaceShell({
   const [openChatMenuId, setOpenChatMenuId] = useState<string | null>(null);
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [savedChatsOpen, setSavedChatsOpen] = useState(true);
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
   const workspacePickerRef = useRef<HTMLDivElement>(null);
@@ -251,6 +254,27 @@ export default function WorkspaceShell({
   }, [workspaceMenuOpen]);
 
   useEffect(() => {
+    let active = true;
+    const frame = window.requestAnimationFrame(() => {
+      if (!active) return;
+      const storedWorkspaceId = window.localStorage.getItem(
+        activeWorkspaceStorageKey,
+      );
+      if (
+        storedWorkspaceId &&
+        workspaces.some((workspace) => workspace.id === storedWorkspaceId)
+      ) {
+        setActiveWorkspaceId(storedWorkspaceId);
+      }
+    });
+
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [workspaces]);
+
+  useEffect(() => {
     if (
       typeof window === "undefined" ||
       new URLSearchParams(window.location.search).get("billing") !== "success"
@@ -292,6 +316,7 @@ export default function WorkspaceShell({
         workspaces.some((workspace) => workspace.id === workspaceId)
       ) {
         setActiveWorkspaceId(workspaceId);
+        window.localStorage.setItem(activeWorkspaceStorageKey, workspaceId);
       }
       setCreditPurchaseStatus(purchaseStatus);
       setAccessDialog("manage");
@@ -467,6 +492,7 @@ export default function WorkspaceShell({
   const switchWorkspace = (workspaceId: string) => {
     setWorkspaceMenuOpen(false);
     if (workspaceId === activeWorkspaceId) return;
+    window.localStorage.setItem(activeWorkspaceStorageKey, workspaceId);
     setActiveWorkspaceId(workspaceId);
     setSavedConversations([]);
     setRequestedConversationId(null);
@@ -1142,18 +1168,37 @@ export default function WorkspaceShell({
             aria-label="Saved chats"
             className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            <p className="mb-2 shrink-0 truncate text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
-              Saved Chats
-            </p>
-            {conversationError && (
-              <p
-                className="mb-2 shrink-0 rounded bg-[#ffebee] px-1 py-1 text-[10px] font-medium leading-tight tracking-tight text-[#a64239]"
-                role="alert"
-              >
-                {conversationError}
-              </p>
-            )}
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <button
+              aria-controls="saved-chat-list"
+              aria-expanded={savedChatsOpen}
+              aria-label={`${savedChatsOpen ? "Collapse" : "Expand"} saved chats`}
+              className="mb-2 flex shrink-0 items-center justify-between gap-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+              onClick={() => setSavedChatsOpen((open) => !open)}
+              type="button"
+            >
+              <span className="truncate text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
+                Saved Chats
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className={`size-3 shrink-0 text-[#858780] transition-transform ${
+                  savedChatsOpen ? "" : "-rotate-90"
+                }`}
+              />
+            </button>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              hidden={!savedChatsOpen}
+              id="saved-chat-list"
+            >
+              {conversationError && (
+                <p
+                  className="mb-2 shrink-0 rounded bg-[#ffebee] px-1 py-1 text-[10px] font-medium leading-tight tracking-tight text-[#a64239]"
+                  role="alert"
+                >
+                  {conversationError}
+                </p>
+              )}
               {activeChats.length === 0 ? (
                 <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
                   No saved chats yet

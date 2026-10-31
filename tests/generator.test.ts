@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   generateRelationalTables,
   generateRecords,
+  createRelationalGeneratorRequestSchema,
   generatorRequestSchema,
+  PRO_RELATIONAL_GENERATION_LIMITS,
   relationalGeneratorRequestSchema,
   recordsToCsv,
 } from "../lib/generator/engine";
@@ -156,6 +158,42 @@ describe("relational table generation", () => {
           },
         ],
       }).success,
+    ).toBe(false);
+  });
+
+  it("allows Pro-sized schemas while retaining their table and record caps", () => {
+    const request = {
+      tables: Array.from({ length: 80 }, (_, index) => ({
+        name: `table_${index}`,
+        fields: [{ name: "id", type: "uuid" as const }],
+      })),
+      count: 100,
+      seed: 7,
+    };
+
+    expect(
+      createRelationalGeneratorRequestSchema(
+        PRO_RELATIONAL_GENERATION_LIMITS,
+      ).safeParse(request).success,
+    ).toBe(true);
+    expect(relationalGeneratorRequestSchema.safeParse(request).success).toBe(
+      false,
+    );
+    expect(
+      createRelationalGeneratorRequestSchema(
+        PRO_RELATIONAL_GENERATION_LIMITS,
+      ).safeParse({
+        ...request,
+        tables: [...request.tables, {
+          name: "table_80",
+          fields: [{ name: "id", type: "uuid" as const }],
+        }],
+      }).success,
+    ).toBe(false);
+    expect(
+      createRelationalGeneratorRequestSchema(
+        PRO_RELATIONAL_GENERATION_LIMITS,
+      ).safeParse({ ...request, count: 101 }).success,
     ).toBe(false);
   });
 
@@ -402,6 +440,31 @@ ${uploadedSql}`,
           ?.records.some((product) => product.id === item.product_id),
       ),
     ).toBe(true);
+  });
+
+  it("parses Pro SQL schemas up to 80 tables and 100 rows per table", () => {
+    const sql = Array.from(
+      { length: 11 },
+      (_, index) => `CREATE TABLE table_${index} (id UUID PRIMARY KEY);`,
+    ).join("\n");
+
+    expect(() => parseUploadedSqlSchema(sql, 100, 17)).toThrow();
+    const request = parseUploadedSqlSchema(
+      sql,
+      100,
+      17,
+      PRO_RELATIONAL_GENERATION_LIMITS,
+    );
+    expect(request.tables).toHaveLength(11);
+    expect(request.count).toBe(100);
+    expect(() =>
+      parseUploadedSqlSchema(
+        sql,
+        101,
+        17,
+        PRO_RELATIONAL_GENERATION_LIMITS,
+      ),
+    ).toThrow();
   });
 
   it("resolves PostgreSQL domains and custom enum types", () => {

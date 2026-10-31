@@ -24,7 +24,7 @@ const messagesSchema = z
       attachmentSizeBytes: z.number().int().min(0).max(64_000).optional(),
       attachmentContents: z.string().max(64_000).optional(),
       generatedArtifactId: z.uuid().optional(),
-      generatedArtifactIds: z.array(z.uuid()).max(10).optional(),
+      generatedArtifactIds: z.array(z.uuid()).max(80).optional(),
       modelUsed: z.string().trim().min(1).max(120).optional(),
     }),
   )
@@ -59,6 +59,33 @@ const saveInputSchema = z.object({
   workspaceId: workspaceIdSchema,
   messages: messagesSchema,
 });
+
+const editInputSchema = z.object({
+  id: conversationIdSchema,
+  workspaceId: workspaceIdSchema,
+  messages: messagesSchema,
+  artifactIds: z
+    .array(conversationIdSchema)
+    .max(1000)
+    .refine((ids) => new Set(ids).size === ids.length),
+});
+
+const editedConversationSchema = z
+  .array(
+    z.object({
+      id: conversationIdSchema,
+      workspace_id: workspaceIdSchema,
+      title: z.string().min(1).max(120),
+      updated_at: z.iso.datetime({ offset: true }),
+      pinned: z.boolean(),
+      archived: z.boolean(),
+      label: z.string().nullable(),
+      color: z
+        .enum(["gray", "red", "orange", "yellow", "green", "blue", "purple"])
+        .nullable(),
+    }),
+  )
+  .length(1);
 
 const updatePinnedInputSchema = z.object({
   id: conversationIdSchema,
@@ -170,7 +197,7 @@ const artifactPositionsInputSchema = z.object({
       }),
     )
     .min(1)
-    .max(25)
+    .max(80)
     .refine(
       (positions) =>
         new Set(positions.map((entry) => entry.artifactId)).size ===
@@ -564,6 +591,63 @@ export async function saveAiConversation(
       archived: data.archived,
       label: data.label,
       color: data.color,
+    },
+  };
+}
+
+export async function editAiConversationAfterMessage(
+  input: unknown,
+): Promise<ConversationResult<AiConversationSummary>> {
+  const parsedInput = editInputSchema.safeParse(input);
+  if (!parsedInput.success) {
+    return { error: "This chat could not be updated. Please try again." };
+  }
+
+  const auth = await getWorkspaceAccess(parsedInput.data.workspaceId);
+  if ("error" in auth) return auth;
+
+  const firstUserMessage = parsedInput.data.messages.find(
+    (message) => message.role === "user",
+  );
+  if (!firstUserMessage) {
+    return { error: "A chat needs a user message before it can be saved." };
+  }
+
+  const title =
+    firstUserMessage.content.replace(/\s+/g, " ").trim().slice(0, 120) ||
+    "New conversation";
+  const { data, error } = await auth.supabase.rpc(
+    "edit_ai_conversation_after_message",
+    {
+      p_conversation_id: parsedInput.data.id,
+      p_workspace_id: parsedInput.data.workspaceId,
+      p_messages: parsedInput.data.messages,
+      p_title: title,
+      p_artifact_ids: parsedInput.data.artifactIds,
+    },
+  );
+
+  const parsedConversation = editedConversationSchema.safeParse(data);
+  const edited = parsedConversation.success
+    ? parsedConversation.data[0]
+    : undefined;
+  if (error || !edited) {
+    return {
+      error:
+        "Unable to update this chat. Apply the conversation edit migration, then try again.",
+    };
+  }
+
+  return {
+    data: {
+      id: edited.id,
+      workspaceId: edited.workspace_id,
+      title: edited.title,
+      updatedAt: edited.updated_at,
+      pinned: edited.pinned,
+      archived: edited.archived,
+      label: edited.label,
+      color: edited.color,
     },
   };
 }

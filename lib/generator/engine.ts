@@ -2,6 +2,22 @@ import { faker } from "@faker-js/faker";
 import { z } from "zod";
 
 export const MAX_RECORD_COUNT = 500;
+export const DEFAULT_RELATIONAL_GENERATION_LIMITS = {
+  maxTables: 10,
+  maxRecordsPerTable: MAX_RECORD_COUNT,
+  maxTotalRecords: 2_000,
+} as const;
+export const PRO_RELATIONAL_GENERATION_LIMITS = {
+  maxTables: 80,
+  maxRecordsPerTable: 100,
+  maxTotalRecords: 8_000,
+} as const;
+
+export type RelationalGenerationLimits = {
+  maxTables: number;
+  maxRecordsPerTable: number;
+  maxTotalRecords: number;
+};
 
 export const fieldTypes = [
   "uuid",
@@ -165,115 +181,122 @@ export const relationalGeneratorFieldSchema = generatorFieldSchema.extend({
     .optional(),
 });
 
-export const relationalGeneratorRequestSchema = z
-  .object({
-    tables: z
-      .array(
-        z.object({
-          name: z
-            .string()
-            .trim()
-            .min(1)
-            .max(80)
-            .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
-          fields: z.array(relationalGeneratorFieldSchema).min(1).max(25),
-        }),
-      )
-      .min(1)
-      .max(10),
-    count: z.number().int().min(1).max(MAX_RECORD_COUNT),
-    seed: z.number().int().min(0).max(2_147_483_647),
-  })
-  .superRefine((request, context) => {
-    if (request.tables.length * request.count > 2_000) {
-      context.addIssue({
-        code: "custom",
-        message: "A request can generate at most 2,000 records across all tables.",
-        path: ["count"],
-      });
-    }
-
-    const tablesByName = new Map(
-      request.tables.map((table) => [table.name, table]),
-    );
-    if (tablesByName.size !== request.tables.length) {
-      context.addIssue({
-        code: "custom",
-        message: "Table names must be unique.",
-        path: ["tables"],
-      });
-    }
-
-    const dependencies = new Map<string, Set<string>>();
-    for (const [tableIndex, table] of request.tables.entries()) {
-      const fieldNames = new Set(table.fields.map((field) => field.name));
-      if (fieldNames.size !== table.fields.length) {
+export function createRelationalGeneratorRequestSchema(
+  limits: RelationalGenerationLimits = DEFAULT_RELATIONAL_GENERATION_LIMITS,
+) {
+  return z
+    .object({
+      tables: z
+        .array(
+          z.object({
+            name: z
+              .string()
+              .trim()
+              .min(1)
+              .max(80)
+              .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+            fields: z.array(relationalGeneratorFieldSchema).min(1).max(25),
+          }),
+        )
+        .min(1)
+        .max(limits.maxTables),
+      count: z.number().int().min(1).max(limits.maxRecordsPerTable),
+      seed: z.number().int().min(0).max(2_147_483_647),
+    })
+    .superRefine((request, context) => {
+      if (request.tables.length * request.count > limits.maxTotalRecords) {
         context.addIssue({
           code: "custom",
-          message: `Field names in table "${table.name}" must be unique.`,
-          path: ["tables", tableIndex, "fields"],
+          message: `A request can generate at most ${limits.maxTotalRecords.toLocaleString()} records across all tables.`,
+          path: ["count"],
         });
       }
 
-      const primaryKeys = table.fields.filter((field) => field.primaryKey);
-      if (primaryKeys.length > 1) {
+      const tablesByName = new Map(
+        request.tables.map((table) => [table.name, table]),
+      );
+      if (tablesByName.size !== request.tables.length) {
         context.addIssue({
           code: "custom",
-          message: `Table "${table.name}" can define only one primary key.`,
-          path: ["tables", tableIndex, "fields"],
-        });
-      }
-
-      dependencies.set(table.name, new Set());
-      for (const [fieldIndex, field] of table.fields.entries()) {
-        if (!field.references) continue;
-        const targetTable = tablesByName.get(field.references.table);
-        const targetField = targetTable?.fields.find(
-          (candidate) => candidate.name === field.references?.field,
-        );
-        if (
-          !targetTable ||
-          !targetField?.primaryKey ||
-          targetField.type !== field.type
-        ) {
-          context.addIssue({
-            code: "custom",
-            message: `Reference "${table.name}.${field.name}" must target a compatible primary key in a generated table.`,
-            path: ["tables", tableIndex, "fields", fieldIndex, "references"],
-          });
-          continue;
-        }
-        if (targetTable.name !== table.name) {
-          dependencies.get(table.name)?.add(targetTable.name);
-        }
-      }
-    }
-
-    const visited = new Set<string>();
-    const visiting = new Set<string>();
-    const visit = (tableName: string) => {
-      if (visiting.has(tableName)) return false;
-      if (visited.has(tableName)) return true;
-      visiting.add(tableName);
-      for (const dependency of dependencies.get(tableName) ?? []) {
-        if (!visit(dependency)) return false;
-      }
-      visiting.delete(tableName);
-      visited.add(tableName);
-      return true;
-    };
-
-    for (const table of request.tables) {
-      if (!visit(table.name)) {
-        context.addIssue({
-          code: "custom",
-          message: "Table relationships cannot contain cycles.",
+          message: "Table names must be unique.",
           path: ["tables"],
         });
-        break;
       }
-    }
-  });
+
+      const dependencies = new Map<string, Set<string>>();
+      for (const [tableIndex, table] of request.tables.entries()) {
+        const fieldNames = new Set(table.fields.map((field) => field.name));
+        if (fieldNames.size !== table.fields.length) {
+          context.addIssue({
+            code: "custom",
+            message: `Field names in table "${table.name}" must be unique.`,
+            path: ["tables", tableIndex, "fields"],
+          });
+        }
+
+        const primaryKeys = table.fields.filter((field) => field.primaryKey);
+        if (primaryKeys.length > 1) {
+          context.addIssue({
+            code: "custom",
+            message: `Table "${table.name}" can define only one primary key.`,
+            path: ["tables", tableIndex, "fields"],
+          });
+        }
+
+        dependencies.set(table.name, new Set());
+        for (const [fieldIndex, field] of table.fields.entries()) {
+          if (!field.references) continue;
+          const targetTable = tablesByName.get(field.references.table);
+          const targetField = targetTable?.fields.find(
+            (candidate) => candidate.name === field.references?.field,
+          );
+          if (
+            !targetTable ||
+            !targetField?.primaryKey ||
+            targetField.type !== field.type
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: `Reference "${table.name}.${field.name}" must target a compatible primary key in a generated table.`,
+              path: ["tables", tableIndex, "fields", fieldIndex, "references"],
+            });
+            continue;
+          }
+          if (targetTable.name !== table.name) {
+            dependencies.get(table.name)?.add(targetTable.name);
+          }
+        }
+      }
+
+      const visited = new Set<string>();
+      const visiting = new Set<string>();
+      const visit = (tableName: string) => {
+        if (visiting.has(tableName)) return false;
+        if (visited.has(tableName)) return true;
+        visiting.add(tableName);
+        for (const dependency of dependencies.get(tableName) ?? []) {
+          if (!visit(dependency)) return false;
+        }
+        visiting.delete(tableName);
+        visited.add(tableName);
+        return true;
+      };
+
+      for (const table of request.tables) {
+        if (!visit(table.name)) {
+          context.addIssue({
+            code: "custom",
+            message: "Table relationships cannot contain cycles.",
+            path: ["tables"],
+          });
+          break;
+        }
+      }
+    });
+}
+
+export const relationalGeneratorRequestSchema =
+  createRelationalGeneratorRequestSchema();
 
 export type RelationalGeneratorRequest = z.infer<
   typeof relationalGeneratorRequestSchema
@@ -291,8 +314,9 @@ export type GeneratedTable = {
 
 export function generateRelationalTables(
   input: RelationalGeneratorRequest,
+  limits: RelationalGenerationLimits = DEFAULT_RELATIONAL_GENERATION_LIMITS,
 ): GeneratedTable[] {
-  const request = relationalGeneratorRequestSchema.parse(input);
+  const request = createRelationalGeneratorRequestSchema(limits).parse(input);
   const pending = new Map(request.tables.map((table) => [table.name, table]));
   const generated = new Map<string, GeneratedRecord[]>();
   const output: GeneratedTable[] = [];

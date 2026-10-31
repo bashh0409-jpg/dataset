@@ -3,6 +3,7 @@ import {
   extractOpenRouterContent,
   parseAiSchema,
 } from "../lib/generator/ai-schema";
+import { PRO_RELATIONAL_GENERATION_LIMITS } from "../lib/generator/engine";
 
 describe("OpenRouter response parsing", () => {
   it("extracts text from the standard completion response", () => {
@@ -124,6 +125,17 @@ describe("AI-generated schema parsing", () => {
     });
   });
 
+  it("accepts clarification questions longer than 300 characters", () => {
+    const question =
+      `Could you clarify the requested schema? ${"Please specify the intended field details. ".repeat(8)}`.trim();
+    const result = parseAiSchema(
+      JSON.stringify({ status: "clarification", question }),
+      0,
+    );
+
+    expect(result).toEqual({ status: "clarification", question });
+  });
+
   it("treats a plain-text model question as a clarification", () => {
     const result = parseAiSchema(
       "Which fields should each product include?",
@@ -235,6 +247,30 @@ describe("AI-generated schema parsing", () => {
         name: "user_id",
         references: { table: "users", field: "id" },
       });
+    }
+  });
+
+  it("accepts up to 80 tables and 100 records for Pro workspaces", () => {
+    const response = JSON.stringify({
+      status: "ready",
+      count: 100,
+      tables: Array.from({ length: 80 }, (_, index) => ({
+        name: `table_${index}`,
+        fields: [{ name: "id", type: "uuid" }],
+      })),
+    });
+
+    expect(() => parseAiSchema(response, 42)).toThrow();
+    const result = parseAiSchema(
+      response,
+      42,
+      undefined,
+      PRO_RELATIONAL_GENERATION_LIMITS,
+    );
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables).toHaveLength(80);
+      expect(result.request.count).toBe(100);
     }
   });
 

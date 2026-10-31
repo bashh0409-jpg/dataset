@@ -30,6 +30,9 @@ export default function SignInModal({
   const [loadingAction, setLoadingAction] = useState<
     Provider | "email" | null
   >(null);
+  const [retryAction, setRetryAction] = useState<Provider | "email" | null>(
+    null,
+  );
   const [emailStep, setEmailStep] = useState<"closed" | "email" | "sent">(
     "closed",
   );
@@ -49,6 +52,7 @@ export default function SignInModal({
 
   const signInWithProvider = async (provider: Provider) => {
     setError("");
+    setRetryAction(provider);
     setLoadingAction(provider);
 
     try {
@@ -71,9 +75,9 @@ export default function SignInModal({
     }
   };
 
-  const sendEmailLink = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const sendEmailLink = async () => {
     setError("");
+    setRetryAction("email");
     setLoadingAction("email");
 
     try {
@@ -88,6 +92,7 @@ export default function SignInModal({
       if (authError) throw authError;
       setEmailStep("sent");
     } catch (authError) {
+      setEmailStep("email");
       setError(
         authError instanceof Error
           ? authError.message
@@ -96,6 +101,23 @@ export default function SignInModal({
     } finally {
       setLoadingAction(null);
     }
+  };
+
+  const submitEmailLink = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void sendEmailLink();
+  };
+
+  const retrySignIn = () => {
+    if (retryAction === "email") {
+      void sendEmailLink();
+      return;
+    }
+    if (retryAction === "google" || retryAction === "github") {
+      void signInWithProvider(retryAction);
+      return;
+    }
+    setError("");
   };
 
   return (
@@ -119,13 +141,29 @@ export default function SignInModal({
         </p>
 
         {error && (
-          <p
+          <div
             aria-live="polite"
             className="geist mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium leading-4 tracking-tight text-red-700"
             role="alert"
           >
-            {error}
-          </p>
+            <p>{error}</p>
+            <button
+              className="mt-1 font-semibold underline underline-offset-2 disabled:opacity-60"
+              disabled={loadingAction !== null}
+              onClick={retrySignIn}
+              type="button"
+            >
+              {loadingAction === "email"
+                ? "Sending link..."
+                : loadingAction
+                  ? "Signing in..."
+                  : retryAction === "email"
+                    ? "Resend sign-in link"
+                    : retryAction
+                      ? `Retry ${retryAction === "google" ? "Google" : "GitHub"} sign-in`
+                      : "Try signing in again"}
+            </button>
+          </div>
         )}
 
         {emailStep === "closed" && (
@@ -165,7 +203,7 @@ export default function SignInModal({
         )}
 
         {emailStep === "email" && (
-          <form className="mt-4 flex flex-col gap-2" onSubmit={sendEmailLink}>
+          <form className="mt-4 flex flex-col gap-2" onSubmit={submitEmailLink}>
             <label className="sr-only" htmlFor="signin-email">
               Email address
             </label>
@@ -194,10 +232,22 @@ export default function SignInModal({
 
         {emailStep === "sent" && (
           <div className="mt-4 flex flex-col gap-3">
-            <p className="geist hidde mx-auto text-left max-w-xs text-sm font-medium leading-4 tracking-tight text-[#999]">
-              Check your inbox for a sign-in link sent to{" "}
-              <strong>{email}</strong>. Open the link to finish signing in.
-            </p>
+            <div className="geist mx-auto max-w-xs text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
+              <p>
+                Check your inbox for a sign-in link sent to{" "}
+                <strong>{email}</strong>. Open the link to finish signing in.
+              </p>
+              <button
+                className="mt-2 font-semibold underline underline-offset-2 disabled:opacity-60"
+                disabled={loadingAction !== null}
+                onClick={() => void sendEmailLink()}
+                type="button"
+              >
+                {loadingAction === "email"
+                  ? "Sending link..."
+                  : "Resend sign-in link"}
+              </button>
+            </div>
             <button
               className={pillButton}
               disabled={loadingAction !== null}

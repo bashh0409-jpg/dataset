@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
-  relationalGeneratorRequestSchema,
+  createRelationalGeneratorRequestSchema,
+  DEFAULT_RELATIONAL_GENERATION_LIMITS,
+  type RelationalGenerationLimits,
   type RelationalGeneratorRequest,
 } from "./engine";
 
@@ -488,6 +490,7 @@ export function parseUploadedSqlSchema(
   sql: string,
   count: number,
   seed: number,
+  limits: RelationalGenerationLimits = DEFAULT_RELATIONAL_GENERATION_LIMITS,
 ): RelationalGeneratorRequest {
   if (sql.length > 64_000) {
     throw new Error("The SQL schema file is too large to analyze.");
@@ -513,7 +516,7 @@ export function parseUploadedSqlSchema(
     }),
   }));
 
-  const result = relationalGeneratorRequestSchema.safeParse({
+  const result = createRelationalGeneratorRequestSchema(limits).safeParse({
     tables,
     count,
     seed,

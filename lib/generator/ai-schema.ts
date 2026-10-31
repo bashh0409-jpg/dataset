@@ -2,7 +2,9 @@ import { z } from "zod";
 import {
   fieldTypes,
   generatorFieldSchema,
-  relationalGeneratorRequestSchema,
+  createRelationalGeneratorRequestSchema,
+  DEFAULT_RELATIONAL_GENERATION_LIMITS,
+  type RelationalGenerationLimits,
   type FieldType,
   type RelationalGeneratorRequest,
 } from "./engine";
@@ -34,7 +36,7 @@ const openRouterCompletionSchema = z.object({
 
 const clarificationResponseSchema = z.object({
   status: z.literal("clarification"),
-  question: z.string().trim().min(1).max(300),
+  question: z.string().trim().min(1).max(4_000),
 });
 const aiFieldTypeSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
@@ -89,7 +91,7 @@ const multiTableResponseSchema = z.object({
       }),
     )
     .min(1)
-    .max(10),
+    .max(80),
 });
 
 const aiResponseSchema = z.union([
@@ -217,6 +219,7 @@ export function parseAiSchema(
   content: string,
   seed: number,
   requestedCount?: number,
+  limits: RelationalGenerationLimits = DEFAULT_RELATIONAL_GENERATION_LIMITS,
 ): AiSchemaResult {
   const rawResponse = extractJsonObject(content);
   const candidate =
@@ -239,7 +242,7 @@ export function parseAiSchema(
   if (count === undefined) {
     return {
       status: "clarification",
-      question: "How many records should I generate? Choose between 1 and 500.",
+      question: `How many records should I generate? Choose between 1 and ${limits.maxRecordsPerTable}.`,
     };
   }
 
@@ -250,7 +253,7 @@ export function parseAiSchema(
 
   return {
     status: "ready",
-    request: relationalGeneratorRequestSchema.parse({
+    request: createRelationalGeneratorRequestSchema(limits).parse({
       tables: tables.map((table) => ({
         ...table,
         fields: table.fields.map(normalizeAiField),
