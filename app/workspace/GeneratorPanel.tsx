@@ -173,7 +173,8 @@ export default function GeneratorPanel({
   const [schemaLayoutError, setSchemaLayoutError] = useState("");
   const [manualName, setManualName] = useState("users");
   const [manualCount, setManualCount] = useState("25");
-  const [manualFields, setManualFields] = useState(defaultManualFields);
+  const [manualFields, setManualFields] =
+    useState<ManualField[]>(defaultManualFields);
   const [nextManualFieldId, setNextManualFieldId] = useState(4);
   const [dataset, setDataset] = useState<GeneratedDataset | null>(null);
   const [generatedTables, setGeneratedTables] = useState<GeneratedDataset[]>([]);
@@ -1629,9 +1630,9 @@ export default function GeneratorPanel({
         setArtifacts(result.data.artifacts);
         setExampleFlyoutOpen(false);
         setPrompt("");
+        resetSchemaCanvas();
         setDataset(null);
         setGeneratedTables([]);
-        resetSchemaCanvas();
         changeDataView("table");
         setError("");
         setSaveError("");
@@ -3398,7 +3399,7 @@ export default function GeneratorPanel({
                   <div className="absolute inset-x-3 top-3 z-30 flex flex-wrap items-center gap-1 pr-9">
                     <div
                       aria-label="Relationship line style"
-                      className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
+                      className="flex items-center rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 "
                       role="group"
                     >
                       <button
@@ -3440,7 +3441,7 @@ export default function GeneratorPanel({
                     </div>
                     <div
                       aria-label="Schema zoom controls"
-                      className="flex items-center gap-1 rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 shadow-sm"
+                      className="flex items-center gap-1 rounded-md border border-[#dfe3dd] bg-white/95 p-0.5 "
                     >
                       <button
                         aria-label="Zoom out schema"
@@ -3480,7 +3481,7 @@ export default function GeneratorPanel({
                     </div>
                     <button
                       aria-label="Auto clean schema layout"
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850]  transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={cleanSchemaLayout}
                       title="Arrange tables to make relationships easier to follow"
                       type="button"
@@ -3497,7 +3498,7 @@ export default function GeneratorPanel({
                     )}
                     <button
                       aria-label="Fit schema to view"
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850]  transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={fitSchemaToView}
                       title="Fit schema to view"
                       type="button"
@@ -3512,7 +3513,7 @@ export default function GeneratorPanel({
                           ? "Exit expanded schema view"
                           : "View schema in a larger view"
                       }
-                      className="absolute right-0 top-0 flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="absolute right-0 top-0 flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850]  transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={() =>
                         setIsSchemaExpanded((expanded) => !expanded)
                       }
@@ -3536,7 +3537,7 @@ export default function GeneratorPanel({
                           : "Play relationship animations"
                       }
                       aria-pressed={areSchemaRelationshipsAnimated}
-                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850] shadow-sm transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
+                      className="flex h-7 items-center gap-1.5 rounded-md border border-[#dfe3dd] bg-white/95 px-2 text-[10px] font-medium text-[#555850]  transition hover:bg-[#f1f3ee] focus-visible:outline-2 focus-visible:outline-[#858780]"
                       onClick={() => {
                         if (areSchemaRelationshipsAnimated) {
                           setAnimatedSchemaTable(null);

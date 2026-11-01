@@ -380,7 +380,7 @@ export default function WorkspaceAccessDialog({
                 className="flex w-full items-center justify-between gap-3"
               >
                 <div>
-                  <p className="geist text-left text-sm font-medium leading-4 tracking-tight text-[#999]">
+                  <p className="geist text-left text-sm font-medium leading-4 tracking-tight">
                     Workspace credits
                   </p>
                 </div>

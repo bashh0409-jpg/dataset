@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   Pencil,
   Pin,
+  Puzzle,
   Search,
   Tag,
   Trash2,
@@ -77,7 +78,7 @@ type WorkspaceShellProps = {
 type WorkspaceView =
   | "generate"
   | "activity"
-  | "schemas"
+  | "plugins"
   | "apps"
   | "developer"
   | "manage";
@@ -126,6 +127,12 @@ const navigation: {
     ),
   },
   {
+    id: "plugins",
+    label: "Plugins",
+    comingSoon: true,
+    icon: <Puzzle aria-hidden="true" className="size-[14px]" />,
+  },
+  {
     id: "apps",
     label: "Apps",
     comingSoon: true,
@@ -154,7 +161,7 @@ const navigation: {
 const viewLabels: Record<WorkspaceView, string> = {
   generate: "Generate",
   activity: "Activity",
-  schemas: "Schemas",
+  plugins: "Plugins",
   apps: "Apps",
   developer: "Console key",
   manage: "Workspace members",
