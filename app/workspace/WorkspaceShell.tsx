@@ -951,44 +951,47 @@ export default function WorkspaceShell({
               {searchOpen && (
                 <section
                   aria-label="Conversation search results"
-                  className="absolute left-0 top-[calc(100%+6px)] z-[70] max-h-[min(78vh,620px)] w-[min(300px,calc(100vw-84px))] overflow-y-auto rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
+                  className="absolute left-0 top-[calc(100%+6px)] z-[70] max-h-[min(78vh,300px)] w-[min(300px,calc(100vw-84px))] overflow-y-auto rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
                   role="region"
                 >
-                  <header className="flex items-center justify-between border-b border-[#e7e8e4] px-2.5 py-1.5">
-                    <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
-                      Conversations
-                    </h2>
-                    <span className="text-[11px] capitalize font-semibold tracking-tight text-[#868880]"></span>
-                    <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
-                      {matchingConversations.length}{" "}
-                      {matchingConversations.length === 1
-                        ? "result"
-                        : "results"}
-                    </h2>
-                  </header>
-                  <label className="flex h-8 items-center gap-2 border-b border-[#e7e8e4] bg-white px-2.5">
-                    <Search
-                      aria-hidden="true"
-                      className="size-[13px] shrink-0 text-[#888a84]"
-                    />
-                    <input
-                      autoFocus
-                      aria-label="Search conversations"
-                      className="min-w-0 flex-1 font-medium tracking-tight bg-transparent text-[12px] outline-none placeholder:text-[#a0a19c]"
-                      onChange={(event) => setSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          setSearch("");
-                          setSearchOpen(false);
-                        }
-                      }}
-                      placeholder="Search conversations"
-                      value={search}
-                    />
-                    <span className="shrink-0 hidden text-[10px] font-medium text-[#868880]">
-                      {matchingConversations.length}
-                    </span>
-                  </label>
+                  
+                  <div className="sticky top-0 z-10">
+                    <header className="flex items-center justify-between border-b border-[#e7e8e4] bg-[#fbfcf9] px-2.5 py-1.5">
+                      <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
+                        Conversations
+                      </h2>
+                      <span className="text-[11px] capitalize font-semibold tracking-tight text-[#868880]"></span>
+                      <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
+                        {matchingConversations.length}{" "}
+                        {matchingConversations.length === 1
+                          ? "result"
+                          : "results"}
+                      </h2>
+                    </header>
+                    <label className="flex h-8 items-center gap-2 border-b border-[#e7e8e4] bg-white px-2.5">
+                      <Search
+                        aria-hidden="true"
+                        className="size-[13px] shrink-0 text-[#888a84]"
+                      />
+                      <input
+                        autoFocus
+                        aria-label="Search conversations"
+                        className="min-w-0 flex-1 font-medium tracking-tight bg-transparent text-[12px] outline-none placeholder:text-[#a0a19c]"
+                        onChange={(event) => setSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            setSearch("");
+                            setSearchOpen(false);
+                          }
+                        }}
+                        placeholder="Search conversations"
+                        value={search}
+                      />
+                      <span className="shrink-0 hidden text-[10px] font-medium text-[#868880]">
+                        {matchingConversations.length}
+                      </span>
+                    </label>
+                  </div>
 
                   {matchingConversations.length > 0 ? (
                     <ul className="space-y-0.5 p-1">
@@ -1003,14 +1006,7 @@ export default function WorkspaceShell({
                             }}
                             type="button"
                           >
-                            <span
-                              aria-hidden="true"
-                              className={`size-2 shrink-0 rounded-full ${
-                                conversation.color
-                                  ? conversationColorClasses[conversation.color]
-                                  : "bg-[#c9cbc5]"
-                              }`}
-                            />
+                            
                             <span className="min-w-0 flex-1 text-[10px] truncate text-[11px] font-semibold text-[#4c4e48]">
                               {conversation.title}
                             </span>
