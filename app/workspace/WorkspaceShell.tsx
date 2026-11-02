@@ -217,6 +217,7 @@ export default function WorkspaceShell({
   const [renameValue, setRenameValue] = useState("");
   const [savedChatsOpen, setSavedChatsOpen] = useState(true);
   const [archivedChatsOpen, setArchivedChatsOpen] = useState(false);
+  const [archivedChatsOnly, setArchivedChatsOnly] = useState(false);
   const [updatingChatId, setUpdatingChatId] = useState<string | null>(null);
   const workspacePickerRef = useRef<HTMLDivElement>(null);
   const workspacePickerButtonRef = useRef<HTMLButtonElement>(null);
@@ -373,7 +374,7 @@ export default function WorkspaceShell({
     let active = true;
     const restoreFrame = window.requestAnimationFrame(() => {
       if (!active) return;
-      const conversationId = window.localStorage.getItem(
+      const conversationId = window.sessionStorage.getItem(
         `synthetic.activeConversationId.${selectedWorkspaceId}`,
       );
       if (!conversationId) return;
@@ -445,7 +446,7 @@ export default function WorkspaceShell({
         )
         .slice(0, 50),
     );
-    window.localStorage.setItem(
+    window.sessionStorage.setItem(
       `synthetic.activeConversationId.${conversation.workspaceId}`,
       conversation.id,
     );
@@ -488,7 +489,7 @@ export default function WorkspaceShell({
   };
 
   const startNewChat = () => {
-    window.localStorage.removeItem(conversationStorageKey);
+    window.sessionStorage.removeItem(conversationStorageKey);
     setRequestedConversationId(null);
     setActiveConversationId(null);
     setNewConversationToken((token) => token + 1);
@@ -527,7 +528,7 @@ export default function WorkspaceShell({
   };
 
   const openSavedChat = (id: string) => {
-    window.localStorage.setItem(conversationStorageKey, id);
+    window.sessionStorage.setItem(conversationStorageKey, id);
     setRequestedConversationId(id);
     setActiveConversationId(id);
     setActiveView("generate");
@@ -589,7 +590,7 @@ export default function WorkspaceShell({
       );
       setOpenChatMenuId(null);
       if (activeConversationId === result.data.id) {
-        window.localStorage.removeItem(
+        window.sessionStorage.removeItem(
           `synthetic.activeConversationId.${chat.workspaceId}`,
         );
         setActiveConversationId(null);
@@ -1175,24 +1176,44 @@ export default function WorkspaceShell({
             aria-label="Saved chats"
             className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            <button
-              aria-controls="saved-chat-list"
-              aria-expanded={savedChatsOpen}
-              aria-label={`${savedChatsOpen ? "Collapse" : "Expand"} saved chats`}
-              className="mb-2 flex shrink-0 items-center justify-between gap-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
-              onClick={() => setSavedChatsOpen((open) => !open)}
-              type="button"
-            >
-              <span className="truncate text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
-                Saved Chats
-              </span>
-              <ChevronDown
-                aria-hidden="true"
-                className={`size-3 shrink-0 text-[#858780] transition-transform ${
-                  savedChatsOpen ? "" : "-rotate-90"
-                }`}
-              />
-            </button>
+            <div className="flex shrink-0 items-center justify-between gap-2 px-[1px]">
+              <button
+                aria-controls="saved-chat-list"
+                aria-expanded={savedChatsOpen}
+                aria-label={`${savedChatsOpen ? "Collapse" : "Expand"} ${archivedChatsOnly ? "archived" : "saved"} chats`}
+                className="mb-2 flex shrink-0 items-center justify-between gap-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                onClick={() => setSavedChatsOpen((open) => !open)}
+                type="button"
+              >
+                <span className="truncate text-xs font-medium tracking-[-0.02em] text-[#646660] max-[640px]:sr-only">
+                  {archivedChatsOnly ? "Archived Chats" : "Saved Chats"}
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-3 shrink-0 text-[#858780] transition-transform ${
+                    savedChatsOpen ? "" : "-rotate-90"
+                  }`}
+                />
+              </button>
+              <button
+                aria-pressed={archivedChatsOnly}
+                aria-label={
+                  archivedChatsOnly ? "Show all saved chats" : "Show archived chats only"
+                }
+                className="mb-2 flex size-6 shrink-0 items-center justify-center rounded text-[#858780] hover:bg-[#f4f5f1] hover:text-[#646660] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
+                onClick={() => {
+                  setSavedChatsOpen(true);
+                  setArchivedChatsOpen(true);
+                  setArchivedChatsOnly((only) => !only);
+                }}
+                title={
+                  archivedChatsOnly ? "Show all saved chats" : "Show archived chats only"
+                }
+                type="button"
+              >
+                <Archive aria-hidden="true" className="size-3" />
+              </button>
+            </div>
             <div
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
               hidden={!savedChatsOpen}
@@ -1206,18 +1227,21 @@ export default function WorkspaceShell({
                   {conversationError}
                 </p>
               )}
-              {activeChats.length === 0 ? (
-                <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
-                  No saved chats yet
-                </p>
-              ) : (
-                <div className="space-y-[2px]">{activeChats.map(renderChat)}</div>
-              )}
-              {archivedChats.length > 0 && (
+              {!archivedChatsOnly &&
+                (activeChats.length === 0 ? (
+                  <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
+                    No saved chats yet
+                  </p>
+                ) : (
+                  <div className="space-y-[2px]">
+                    {activeChats.map(renderChat)}
+                  </div>
+                ))}
+              {(archivedChatsOnly || archivedChats.length > 0) && (
                 <div className="mt-3">
                   <button
                     aria-expanded={archivedChatsOpen}
-                    className="mb-1 flex w-full items-center gap-1 px-1 text-left text-[10px] font-medium uppercase tracking-[0.06em] text-[#969891] hover:text-[#646660] max-[640px]:justify-center"
+                    className="mb-1 flex w-full items-center gap-1 px-1 text-left text-[10px] font-medium uppercase tracking-tight text-[#969891] hover:text-[#646660] max-[640px]:justify-center"
                     onClick={() => setArchivedChatsOpen((open) => !open)}
                     type="button"
                   >
@@ -1228,9 +1252,15 @@ export default function WorkspaceShell({
                     </span>
                   </button>
                   {archivedChatsOpen && (
-                    <div className="space-y-[2px]">
-                      {archivedChats.map(renderChat)}
-                    </div>
+                    archivedChats.length > 0 ? (
+                      <div className="space-y-[2px]">
+                        {archivedChats.map(renderChat)}
+                      </div>
+                    ) : (
+                      <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
+                        No archived chats yet
+                      </p>
+                    )
                   )}
                 </div>
               )}
@@ -1238,7 +1268,9 @@ export default function WorkspaceShell({
           </section>
         </div>
 
-        <div className="p-2 leading-tight font-semibold hidden text-xs" >New notification about the application changes will appear here</div>
+        <div className="p-2 leading-tight font-semibold hidden text-xs">
+          New notification about the application changes will appear here
+        </div>
 
         <footer className="shrink-0  border-t border-[#e9ebe6]">
           <div className="relative border-t border-[#eef0eb] px-[8px] py-2">
@@ -1415,9 +1447,7 @@ export default function WorkspaceShell({
                 </div>,
                 document.body,
               )}
-            {bugReportOpen && (
-              <BugReportDialog onClose={closeBugReport} />
-            )}
+            {bugReportOpen && <BugReportDialog onClose={closeBugReport} />}
             <button
               aria-expanded={accountOpen}
               aria-controls="account-dialog"

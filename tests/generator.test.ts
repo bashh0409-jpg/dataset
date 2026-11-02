@@ -5,6 +5,8 @@ import {
   createRelationalGeneratorRequestSchema,
   generatorRequestSchema,
   PRO_RELATIONAL_GENERATION_LIMITS,
+  fieldTypes,
+  inferGenerationPacks,
   relationalGeneratorRequestSchema,
   recordsToCsv,
 } from "../lib/generator/engine";
@@ -14,6 +16,7 @@ import {
   includeTextAttachmentsInMessages,
   parseUploadedSqlSchema,
 } from "../lib/generator/sql-schema";
+import { linkedPageContentsMarker } from "../lib/ai/link-markers";
 import { createZipBlob } from "../lib/generator/zip";
 
 const validRequest = {
@@ -53,6 +56,27 @@ describe("generator request validation", () => {
 });
 
 describe("deterministic generation and export", () => {
+  it("infers locale and industry packs from request context and schema entities", () => {
+    expect(
+      inferGenerationPacks(
+        "Generate customer and delivery records for Johannesburg, South Africa.",
+        ["customers", "shipments"],
+      ),
+    ).toEqual({ locale: "en-ZA", industry: "logistics" });
+
+    expect(
+      inferGenerationPacks("Create patient appointment records in London.", [
+        "patients",
+        "appointments",
+      ]),
+    ).toEqual({ locale: "en-GB", industry: "healthcare" });
+
+    expect(inferGenerationPacks("Generate some sample records.")).toEqual({
+      locale: "en-US",
+      industry: "general",
+    });
+  });
+
   it("reproduces the same records for the same seed", () => {
     const request = generatorRequestSchema.parse(validRequest);
     expect(generateRecords(request)).toEqual(generateRecords(request));
@@ -73,6 +97,98 @@ describe("deterministic generation and export", () => {
     );
   });
 
+  it("generates coherent customer details and dates from field semantics", () => {
+    const request = generatorRequestSchema.parse({
+      name: "customers",
+      fields: [
+        { name: "first_name", type: "firstName" },
+        { name: "last_name", type: "lastName" },
+        { name: "name", type: "fullName" },
+        { name: "email", type: "email" },
+        { name: "birth_date", type: "date" },
+        { name: "account_expires", type: "date" },
+        { name: "balance", type: "price" },
+      ],
+      count: 20,
+      seed: 42,
+    });
+    const records = generateRecords(request);
+
+    expect(records.every((record) =>
+      record.name === `${record.first_name} ${record.last_name}` &&
+      String(record.email).endsWith("@example.com") &&
+      Date.parse(String(record.birth_date)) >= Date.parse("1940-01-01") &&
+      Date.parse(String(record.birth_date)) <= Date.parse("2007-12-31") &&
+      Date.parse(String(record.account_expires)) >= Date.parse("2026-01-01") &&
+      Date.parse(String(record.account_expires)) <= Date.parse("2030-12-31") &&
+      typeof record.balance === "number" &&
+      record.balance >= 5 &&
+      record.balance <= 1_000,
+    )).toBe(true);
+    expect(new Set(records.map((record) => record.email)).size).toBe(records.length);
+  });
+
+  it("uses logistics-aware carrier and tracking values for shipment fields", () => {
+    const request = generatorRequestSchema.parse({
+      name: "shipments",
+      locale: "en-ZA",
+      industry: "logistics",
+      fields: [
+        { name: "shipment_id", type: "integer" },
+        { name: "order_id", type: "integer" },
+        { name: "carrier", type: "text" },
+        { name: "tracking_no", type: "text" },
+        { name: "shipped_at", type: "date" },
+      ],
+      count: 4,
+      seed: 12,
+    });
+    const records = generateRecords(request);
+
+    expect(records.map((record) => record.carrier)).toEqual([
+      "The Courier Guy",
+      "Pargo",
+      "Aramex",
+      "DHL",
+    ]);
+    expect(records.map((record) => record.tracking_no)).toEqual([
+      "TRK-ZA-SHIPMENTS-000001",
+      "TRK-ZA-SHIPMENTS-000002",
+      "TRK-ZA-SHIPMENTS-000003",
+      "TRK-ZA-SHIPMENTS-000004",
+    ]);
+    expect(records.every((record) =>
+      typeof record.shipped_at === "string" &&
+      /^\d{4}-\d{2}-\d{2}T/.test(record.shipped_at),
+    )).toBe(true);
+  });
+
+  it("applies locale and industry packs to location and catalog values", () => {
+    const request = generatorRequestSchema.parse({
+      name: "products",
+      locale: "en-GB",
+      industry: "healthcare",
+      fields: [
+        { name: "country", type: "country" },
+        { name: "city", type: "city" },
+        { name: "postal_code", type: "postalCode" },
+        { name: "company", type: "company" },
+        { name: "product", type: "product" },
+      ],
+      count: 10,
+      seed: 42,
+    });
+    const records = generateRecords(request);
+
+    expect(records.every((record) =>
+      record.country === "United Kingdom" &&
+      ["London", "Birmingham", "Bristol", "Edinburgh", "Glasgow", "Leeds", "Liverpool", "Manchester", "Oxford", "York"].includes(String(record.city)) &&
+      /^[A-Z0-9 ]{3,10}$/i.test(String(record.postal_code)) &&
+      ["Cedar Grove Health", "Oakwell Medical Group", "Clearview Family Clinic", "Northstar Health Services"].includes(String(record.company)) &&
+      ["Digital Thermometer", "Reusable Cold Pack", "First Aid Kit", "Blood Pressure Monitor", "Pill Organizer", "Medical Examination Gloves"].includes(String(record.product)),
+    )).toBe(true);
+  });
+
   it("exports properly escaped CSV and protects formula-leading values", () => {
     const fields = [
       { name: "name", type: "fullName" as const },
@@ -89,6 +205,18 @@ describe("deterministic generation and export", () => {
 });
 
 describe("relational table generation", () => {
+  const allowedPrimaryKeyTypes = [
+    "integer",
+    "uuid",
+    "idNumber",
+    "email",
+    "company",
+    "product",
+  ] as const;
+  const disallowedPrimaryKeyTypes = fieldTypes.filter(
+    (type) => !new Set<string>(allowedPrimaryKeyTypes).has(type),
+  );
+
   const relationalRequest = {
     tables: [
       {
@@ -160,6 +288,74 @@ describe("relational table generation", () => {
       }).success,
     ).toBe(false);
   });
+
+  it.each(allowedPrimaryKeyTypes)(
+    "generates unique %s primary keys for 500 rows across seeds and locales",
+    (type) => {
+      for (const locale of ["en-US", "en-ZA"] as const) {
+        for (const seed of [7, 42, 137]) {
+          const request = relationalGeneratorRequestSchema.parse({
+            tables: [
+              {
+                name: "records",
+                fields: [{ name: "id", type, primaryKey: true }],
+              },
+            ],
+            count: 500,
+            seed,
+            locale,
+          });
+          const [table] = generateRelationalTables(request);
+          const values = table.records.map((record) => record.id);
+
+          expect(new Set(values).size).toBe(500);
+          if (type === "company" || type === "product") {
+            expect(values.some((value) => String(value).endsWith("#2"))).toBe(
+              true,
+            );
+            const repeatedValues = generateRelationalTables(request)[0]!.records
+              .map((record) => record.id);
+            expect(values).toEqual(repeatedValues);
+          }
+        }
+      }
+    },
+  );
+
+  it.each(disallowedPrimaryKeyTypes)(
+    "rejects %s primary keys with a table- and field-specific error",
+    (type) => {
+      const request = {
+        tables: [
+          {
+            name: "example_table",
+            fields: [
+              {
+                name: "primary_key",
+                type,
+                primaryKey: true,
+                ...(type === "enum" ? { options: ["first", "second"] } : {}),
+              },
+            ],
+          },
+        ],
+        count: 2,
+        seed: 1,
+      };
+      const result = relationalGeneratorRequestSchema.safeParse(request);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.error.issues.some((issue) =>
+            issue.message.includes(
+              'Primary key "example_table.primary_key"',
+            ),
+          ),
+        ).toBe(true);
+      }
+    },
+  );
 
   it("allows Pro-sized schemas while retaining their table and record caps", () => {
     const request = {
@@ -295,6 +491,78 @@ ${uploadedSql}`,
     expect(extractRequestedRecordCount(messages)).toBe(3);
   });
 
+  it("generates sensible city and weather values from SQL semantics", () => {
+    const sql = `
+      CREATE TABLE cities (
+        id INTEGER PRIMARY KEY,
+        name VARCHAR(80) NOT NULL,
+        location POINT
+      );
+      CREATE TABLE weather (
+        city_id INTEGER REFERENCES cities(id),
+        city VARCHAR(80),
+        temp_lo INTEGER,
+        temp_hi INTEGER,
+        prcp REAL,
+        date DATE
+      );
+    `;
+    const request = parseUploadedSqlSchema(sql, 40, 17);
+    const tables = generateRelationalTables(request);
+    const cities = tables.find((table) => table.name === "cities");
+    const weather = tables.find((table) => table.name === "weather");
+
+    expect(cities?.fields).toMatchObject([
+      { name: "id", type: "integer", primaryKey: true },
+      { name: "name", type: "city" },
+      { name: "location", type: "coordinates" },
+    ]);
+    expect(weather?.fields).toMatchObject([
+      { name: "city_id", type: "integer" },
+      { name: "city", type: "city" },
+      { name: "temp_lo", type: "temperature" },
+      { name: "temp_hi", type: "temperature" },
+      { name: "prcp", type: "precipitation" },
+      { name: "date", type: "date" },
+    ]);
+    expect(cities?.records.every((record) =>
+      /^[A-Z][A-Za-z]*(?: [A-Za-z]+)*$/.test(String(record.name)),
+    )).toBe(true);
+    expect(cities?.records.every((record) =>
+      /^\(-?\d+(?:\.\d+)?, -?\d+(?:\.\d+)?\)$/.test(String(record.location)),
+    )).toBe(true);
+    expect(weather?.records.every((record) =>
+      typeof record.temp_lo === "number" &&
+      typeof record.temp_hi === "number" &&
+      record.temp_lo >= -20 &&
+      record.temp_hi <= 45 &&
+      record.temp_lo <= record.temp_hi &&
+      typeof record.prcp === "number" &&
+      record.prcp >= 0 &&
+      record.prcp <= 50 &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(record.date)),
+    )).toBe(true);
+    expect(weather?.records.every((record) =>
+      cities?.records.some((city) => city.id === record.city_id),
+    )).toBe(true);
+  });
+
+  it("infers carrier and tracking-number types from SQL column names", () => {
+    const request = parseUploadedSqlSchema(
+      `CREATE TABLE shipments (
+        carrier VARCHAR(80),
+        tracking_no VARCHAR(80)
+      );`,
+      2,
+      11,
+    );
+
+    expect(request.tables[0].fields).toMatchObject([
+      { name: "carrier", type: "carrier" },
+      { name: "tracking_no", type: "trackingNumber" },
+    ]);
+  });
+
   it("uses the most recently pasted SQL schema in an existing chat", () => {
     const newSchema = `
       BEGIN;
@@ -365,6 +633,26 @@ ${uploadedSql}`,
       "CREATE TABLE order_items",
     );
     expect(extractRequestedRecordCount(modelMessages)).toBe(10);
+  });
+
+  it("does not treat SQL examples from linked pages as uploaded schema", () => {
+    const modelMessages = includeTextAttachmentsInMessages([
+      {
+        role: "user",
+        content: "Use the attached schema and this documentation link.",
+        attachmentContents: uploadedSql,
+      },
+    ]).map((message) => ({
+      ...message,
+      content: `${message.content}\n\n${linkedPageContentsMarker}Linked webpage: https://example.com/docs\nCREATE TABLE unrelated_example (id INTEGER);`,
+    }));
+
+    expect(extractUploadedSql(modelMessages)).toContain(
+      "CREATE TABLE order_items",
+    );
+    expect(extractUploadedSql(modelMessages)).not.toContain(
+      "CREATE TABLE unrelated_example",
+    );
   });
 
   it("accepts a bare count as a reply to the count clarification", () => {

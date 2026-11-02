@@ -5,6 +5,7 @@ import {
   type RelationalGenerationLimits,
   type RelationalGeneratorRequest,
 } from "./engine";
+import { linkedPageContentsMarker } from "../ai/link-markers";
 
 type ParsedColumn = {
   name: string;
@@ -197,6 +198,10 @@ function mapSqlType(
     return { type: "enum" as const, options: customType.enumOptions };
   }
   const resolvedType = customType?.baseType ?? normalizedType;
+  const isNumericType =
+    /^(?:smallint|integer|int|bigint|serial|smallserial|bigserial|tinyint|numeric|decimal|money|real|float|double)/.test(
+      resolvedType,
+    );
   const enumOptions = comment
     .split("/")
     .map((option) => option.replace(/[()[\]]/g, "").trim())
@@ -212,6 +217,27 @@ function mapSqlType(
     /(?:_enabled|_active|_available|^active$|^in_stock$)$/.test(name)
   ) {
     return { type: "boolean" as const };
+  }
+  if (/^(?:carrier|carrier_name|shipping_carrier)$/.test(name)) {
+    return { type: "carrier" as const };
+  }
+  if (/^(?:tracking|tracking_no|tracking_number|tracking_code|tracking_id)$/.test(name)) {
+    return { type: "trackingNumber" as const };
+  }
+  if (
+    isNumericType &&
+    /(?:^|_)(?:temp|temperature)(?:_|$)/.test(name)
+  ) {
+    return { type: "temperature" as const };
+  }
+  if (
+    isNumericType &&
+    /^(?:prcp|precip(?:itation)?|rain(?:fall)?)(?:_|$)/.test(name)
+  ) {
+    return { type: "precipitation" as const };
+  }
+  if (/^(?:point|geography|geometry)$/.test(resolvedType)) {
+    return { type: "coordinates" as const };
   }
   if (/^(?:smallint|integer|int|bigint|serial|smallserial|bigserial|tinyint)$/.test(resolvedType)) {
     return { type: "integer" as const };
@@ -229,8 +255,24 @@ function mapSqlType(
     return { type: "text" as const };
   }
   if (/^(?:char|character|varchar|nvarchar|text|string|citext)/.test(resolvedType)) {
+    if (name === "city") return { type: "city" as const };
+    if (
+      name === "name" &&
+      /^(?:cities|city|towns|town)$/.test(tableName.toLowerCase())
+    ) {
+      return { type: "city" as const };
+    }
     if (name === "email" || name.endsWith("_email")) {
       return { type: "email" as const };
+    }
+    if (/^(?:country|country_name)$/.test(name)) {
+      return { type: "country" as const };
+    }
+    if (/^(?:url|website|homepage|profile_url)$/.test(name)) {
+      return { type: "url" as const };
+    }
+    if (/^(?:postal_code|postcode|zip|zip_code)$/.test(name)) {
+      return { type: "postalCode" as const };
     }
     if (name === "phone" || name.endsWith("_phone") || name === "phone_number") {
       return { type: "phone" as const };
@@ -256,10 +298,16 @@ function mapSqlType(
     if (name === "name" && tableName.toLowerCase().includes("compan")) {
       return { type: "company" as const };
     }
-    if (/status|state|category|type$/.test(name)) {
+    if (/^(?:status|state)$/.test(name)) {
       return {
         type: "enum" as const,
-        options: ["pending", "active", "completed"],
+        options: getContextualEnumOptions(name, tableName),
+      };
+    }
+    if (/^(?:category|type)$/.test(name)) {
+      return {
+        type: "enum" as const,
+        options: getContextualEnumOptions(name, tableName),
       };
     }
     if (/name/.test(name)) return { type: "fullName" as const };
@@ -276,6 +324,35 @@ function mapSqlType(
   throw new Error(
     `The SQL type "${sqlType}" for "${columnName}" in "${tableName}" is not supported yet.`,
   );
+}
+
+function getContextualEnumOptions(fieldName: string, tableName: string) {
+  const table = tableName.toLowerCase();
+  if (fieldName === "category") {
+    if (/product|item|catalog/.test(table)) {
+      return ["clothing", "electronics", "home", "food", "sports"];
+    }
+    if (/support|ticket/.test(table)) {
+      return ["billing", "technical", "account", "general"];
+    }
+    return ["general", "business", "personal", "other"];
+  }
+  if (/order/.test(table)) {
+    return ["pending", "processing", "shipped", "delivered", "cancelled"];
+  }
+  if (/payment|transaction/.test(table)) {
+    return ["pending", "paid", "failed", "refunded"];
+  }
+  if (/ticket|support/.test(table)) {
+    return ["open", "in_progress", "resolved", "closed"];
+  }
+  if (/shipment|delivery/.test(table)) {
+    return ["pending", "in_transit", "delivered", "returned"];
+  }
+  if (/user|account|member/.test(table)) {
+    return ["active", "inactive", "suspended"];
+  }
+  return ["pending", "active", "completed"];
 }
 
 function parseTable(
@@ -413,10 +490,11 @@ export function extractUploadedSql(messages: { role: string; content: string }[]
   const userContents = messages
     .filter((message) => message.role === "user")
     .map((message) => {
-      const markerIndex = message.content.indexOf(marker);
+      const promptContent = message.content.split(linkedPageContentsMarker, 1)[0];
+      const markerIndex = promptContent.indexOf(marker);
       return markerIndex === -1
-        ? message.content
-        : message.content.slice(markerIndex + marker.length);
+        ? promptContent
+        : promptContent.slice(markerIndex + marker.length);
     });
 
   return userContents

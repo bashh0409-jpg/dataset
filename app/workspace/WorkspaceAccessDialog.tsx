@@ -381,7 +381,7 @@ export default function WorkspaceAccessDialog({
               >
                 <div>
                   <p className="geist text-left text-sm font-medium leading-4 tracking-tight">
-                    Workspace credits
+                    Workspace Credits
                   </p>
                 </div>
 

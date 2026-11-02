@@ -2,6 +2,10 @@
 
 import { z } from "zod";
 import { encryptProviderKey } from "@/lib/ai/provider-credentials";
+import {
+  parseWorkspaceProAiUsage,
+  PRO_AI_REQUEST_LIMIT,
+} from "@/lib/ai/pro-usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const providerSchema = z.enum(["anthropic", "openai"]);
@@ -14,8 +18,10 @@ type ProSettingsResult =
         isPro: boolean;
         status: string | null;
         currentPeriodEnd: string | null;
-        includedRequestsUsed: number;
-        monthlyRequestLimit: 50;
+        requestsUsed: number;
+        requestLimit: number;
+        requestsRemaining: number;
+        nextAvailableAt: string | null;
         savedProviders: ("anthropic" | "openai")[];
       };
     }
@@ -32,13 +38,20 @@ async function getCurrentUser() {
   return { supabase, user };
 }
 
-export async function getProAiSettings(): Promise<ProSettingsResult> {
+export async function getProAiSettings(
+  workspaceIdInput: unknown,
+): Promise<ProSettingsResult> {
   const auth = await getCurrentUser();
   if (!auth) return { error: "Please sign in again to view your AI plan." };
 
+  const workspaceId = workspaceIdSchema.safeParse(workspaceIdInput);
+  if (!workspaceId.success) {
+    return { error: "Select a valid workspace to view Pro AI usage." };
+  }
+
   const { data: subscription, error: subscriptionError } = await auth.supabase
     .from("plan_subscriptions")
-    .select("status, current_period_start, current_period_end")
+    .select("status, current_period_end")
     .eq("user_id", auth.user.id)
     .maybeSingle();
 
@@ -49,21 +62,21 @@ export async function getProAiSettings(): Promise<ProSettingsResult> {
   const isPro =
     (subscription?.status === "active" || subscription?.status === "trialing") &&
     Date.parse(subscription.current_period_end) > Date.now();
-  let includedRequestsUsed = 0;
-
-  if (isPro && subscription) {
-    const { count, error } = await auth.supabase
-      .from("usage_events")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", auth.user.id)
-      .eq("event_type", "pro_ai_request")
-      .gte("created_at", subscription.current_period_start)
-      .lt("created_at", subscription.current_period_end);
-
-    if (error) {
-      return { error: "Unable to load your Pro AI usage. Please try again." };
-    }
-    includedRequestsUsed = count ?? 0;
+  const { data: usageData, error: usageError } = await auth.supabase.rpc(
+    "get_workspace_pro_ai_usage",
+    { p_workspace_id: workspaceId.data },
+  );
+  if (usageError) {
+    return { error: "Unable to load your Pro AI usage. Please try again." };
+  }
+  const usage = parseWorkspaceProAiUsage(usageData);
+  if ("error" in usage) {
+    return {
+      error:
+        usage.error === "invalid_reset_time"
+          ? "Pro AI usage returned an invalid reset time."
+          : "Pro AI usage returned an invalid response.",
+    };
   }
 
   const { data: credentials, error: credentialsError } = await auth.supabase
@@ -80,8 +93,10 @@ export async function getProAiSettings(): Promise<ProSettingsResult> {
       isPro,
       status: subscription?.status ?? null,
       currentPeriodEnd: subscription?.current_period_end ?? null,
-      includedRequestsUsed,
-      monthlyRequestLimit: 50,
+      requestsUsed: usage.data.used,
+      requestLimit: PRO_AI_REQUEST_LIMIT,
+      requestsRemaining: usage.data.remaining,
+      nextAvailableAt: usage.data.nextAvailableAt,
       savedProviders: credentials.map((credential) =>
         providerSchema.parse(credential.provider),
       ),
@@ -95,6 +110,8 @@ export async function getWorkspaceProAiUsage(
   | {
       data: {
         used: number;
+        requestLimit: number;
+        remaining: number;
         nextAvailableAt: string | null;
         creditBalance: number;
       };
@@ -117,30 +134,23 @@ export async function getWorkspaceProAiUsage(
     return { error: "Unable to load workspace Pro AI usage. Please try again." };
   }
 
-  const usage = z
-    .array(
-      z.object({
-        used: z.number().int().min(0).max(50),
-        next_available_at: z.string().nullable(),
-        credit_balance: z.number().int().nonnegative(),
-      }),
-    )
-    .length(1)
-    .safeParse(data);
-  if (!usage.success) {
-    return { error: "Workspace Pro AI usage returned an invalid response." };
-  }
-
-  const nextAvailableAt = usage.data[0].next_available_at;
-  if (nextAvailableAt && !Number.isFinite(Date.parse(nextAvailableAt))) {
-    return { error: "Workspace Pro AI usage returned an invalid reset time." };
+  const usage = parseWorkspaceProAiUsage(data);
+  if ("error" in usage) {
+    return {
+      error:
+        usage.error === "invalid_reset_time"
+          ? "Workspace Pro AI usage returned an invalid reset time."
+          : "Workspace Pro AI usage returned an invalid response.",
+    };
   }
 
   return {
     data: {
-      used: usage.data[0].used,
-      nextAvailableAt,
-      creditBalance: usage.data[0].credit_balance,
+      used: usage.data.used,
+      requestLimit: usage.data.requestLimit,
+      remaining: usage.data.remaining,
+      nextAvailableAt: usage.data.nextAvailableAt,
+      creditBalance: usage.data.creditBalance,
     },
   };
 }

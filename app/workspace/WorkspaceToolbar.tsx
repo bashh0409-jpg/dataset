@@ -24,6 +24,7 @@ type WorkspaceToolbarProps = {
 type WorkspaceUsageSummary = {
   workspaceId: string;
   usedRequests: number;
+  requestLimit: number;
   remainingRequests: number;
   resetInMinutes: number | null;
   creditBalance: number;
@@ -101,7 +102,8 @@ export default function WorkspaceToolbar({
         setUsageSummary({
           workspaceId,
           usedRequests: result.data.used,
-          remainingRequests: Math.max(0, 50 - result.data.used),
+          requestLimit: result.data.requestLimit,
+          remainingRequests: result.data.remaining,
           resetInMinutes: resetsAt
             ? Math.max(
                 1,
@@ -165,7 +167,9 @@ export default function WorkspaceToolbar({
           : "Loading";
   const creditBalance = currentUsage?.creditBalance ?? workspaceCreditBalance;
   const usagePercent = currentUsage
-    ? Math.round((currentUsage.usedRequests / 50) * 100)
+    ? Math.round(
+        (currentUsage.usedRequests / currentUsage.requestLimit) * 100,
+      )
     : 0;
 
   return (
@@ -236,7 +240,7 @@ export default function WorkspaceToolbar({
               {hasPremiumAccess && currentUsage ? (
                 <div
                   aria-label="Premium request usage"
-                  aria-valuemax={50}
+                  aria-valuemax={currentUsage.requestLimit}
                   aria-valuemin={0}
                   aria-valuenow={currentUsage.usedRequests}
                   className="mt-5 h-8 overflow-hidden"

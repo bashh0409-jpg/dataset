@@ -113,6 +113,54 @@ describe("AI-generated schema parsing", () => {
     }
   });
 
+  it("normalizes common location fields to realistic semantic types", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        name: "customers",
+        count: 3,
+        fields: [
+          { name: "country", type: "string" },
+          { name: "website", type: "string" },
+          { name: "postal_code", type: "string" },
+        ],
+      }),
+      123,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables[0].fields).toMatchObject([
+        { name: "country", type: "country" },
+        { name: "website", type: "url" },
+        { name: "postal_code", type: "postalCode" },
+      ]);
+    }
+  });
+
+  it("recognizes logistics carrier and tracking fields by name", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        name: "shipments",
+        count: 3,
+        fields: [
+          { name: "carrier", type: "string" },
+          { name: "tracking_no", type: "string" },
+        ],
+      }),
+      123,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables[0].fields).toMatchObject([
+        { name: "carrier", type: "carrier" },
+        { name: "tracking_no", type: "trackingNumber" },
+      ]);
+    }
+  });
+
   it("returns a clarification instead of generating when count is missing", () => {
     const result = parseAiSchema(
       '{"status":"clarification","question":"How many products should I generate?"}',
@@ -247,6 +295,50 @@ describe("AI-generated schema parsing", () => {
         name: "user_id",
         references: { table: "users", field: "id" },
       });
+    }
+  });
+
+  it("corrects common city and weather fields when the model returns generic types", () => {
+    const result = parseAiSchema(
+      JSON.stringify({
+        status: "ready",
+        count: 2,
+        tables: [
+          {
+            name: "cities",
+            fields: [
+              { name: "name", type: "text" },
+              { name: "location", type: "text" },
+            ],
+          },
+          {
+            name: "weather",
+            fields: [
+              { name: "city", type: "text" },
+              { name: "temp_lo", type: "integer" },
+              { name: "temp_hi", type: "integer" },
+              { name: "prcp", type: "price" },
+              { name: "date", type: "date" },
+            ],
+          },
+        ],
+      }),
+      42,
+    );
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.request.tables[0].fields).toMatchObject([
+        { name: "name", type: "city" },
+        { name: "location", type: "coordinates" },
+      ]);
+      expect(result.request.tables[1].fields).toMatchObject([
+        { name: "city", type: "city" },
+        { name: "temp_lo", type: "temperature" },
+        { name: "temp_hi", type: "temperature" },
+        { name: "prcp", type: "precipitation" },
+        { name: "date", type: "date" },
+      ]);
     }
   });
 

@@ -26,9 +26,9 @@ import {
   ThumbsUp,
   ZoomIn,
   ZoomOut,
-  Key,
   KeyRound,
   Network,
+  Folder,
 } from "lucide-react";
 import {
   useCallback,
@@ -39,6 +39,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -57,9 +58,11 @@ import {
   generateRecords,
   generatorRequestSchema,
   type FieldType,
+  inferGenerationPacks,
   recordsToCsv,
   type GeneratedTable,
 } from "@/lib/generator/engine";
+import { exportRelationalSql } from "@/lib/generator/sql-export";
 import { createZipBlob } from "@/lib/generator/zip";
 
 type GeneratedDataset = {
@@ -71,7 +74,7 @@ type GeneratedDataset = {
   artifactId?: string;
 };
 
-type DataView = "table" | "json" | "csv" | "schema";
+type DataView = "table" | "json" | "csv" | "sql" | "schema";
 type ConversationMessage = {
   role: "user" | "assistant";
   content: string;
@@ -109,6 +112,14 @@ const fieldLabels: Record<FieldType, string> = {
   email: "Email",
   company: "Company",
   product: "Product",
+  carrier: "Carrier",
+  trackingNumber: "Tracking number",
+  temperature: "Temperature (°C)",
+  precipitation: "Precipitation (mm)",
+  coordinates: "Coordinates",
+  country: "Country",
+  url: "URL",
+  postalCode: "Postal code",
   integer: "Integer",
   price: "Price",
   boolean: "Boolean",
@@ -141,6 +152,47 @@ const providerFallbackNotice =
 
 const removeProviderFallbackNotice = (content: string) =>
   content.replace(providerFallbackNotice, "").trimStart();
+
+function MessageContent({ content }: { content: string }) {
+  const urlPattern = /https?:\/\/[^\s<>"'`]+/gi;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(urlPattern)) {
+    const rawUrl = match[0];
+    const start = match.index ?? 0;
+    const url = rawUrl.replace(/[.,!?;:]+$/, "").replace(/[)\]}]+$/, "");
+    if (!url) continue;
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      continue;
+    }
+    if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+      continue;
+    }
+
+    parts.push(content.slice(cursor, start));
+    parts.push(
+      <a
+        className="break-all text-[#536b48] underline underline-offset-2 hover:text-[#30332d]"
+        href={parsedUrl.href}
+        key={`${start}-${url}`}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        {url}
+      </a>,
+    );
+    parts.push(rawUrl.slice(url.length));
+    cursor = start + rawUrl.length;
+  }
+
+  parts.push(content.slice(cursor));
+  return <>{parts}</>;
+}
 
 type GeneratorPanelProps = {
   workspaceId: string;
@@ -381,8 +433,29 @@ export default function GeneratorPanel({
     ? recordsToCsv(dataset.fields, dataset.records)
     : "";
   const generatedJson = dataset ? JSON.stringify(dataset.records, null, 2) : "";
+  const generatedSql = exportRelationalSql(
+    generatedTables.length > 0
+      ? generatedTables
+      : dataset
+        ? [
+            {
+              name: dataset.name,
+              fields: dataset.fields,
+              records: dataset.records,
+              count: dataset.count,
+              seed: dataset.seed,
+            },
+          ]
+        : [],
+  );
   const formattedData =
-    view === "json" ? generatedJson : view === "csv" ? generatedCsv : "";
+    view === "json"
+      ? generatedJson
+      : view === "csv"
+        ? generatedCsv
+        : view === "sql"
+          ? generatedSql
+          : "";
   const playSchemaTableRelationships = useCallback((tableName: string) => {
     setAnimatedSchemaTable(tableName);
     if (schemaTableAnimationTimerRef.current !== null) {
@@ -1682,10 +1755,15 @@ export default function GeneratorPanel({
 
     const randomSeed = new Uint32Array(1);
     globalThis.crypto.getRandomValues(randomSeed);
+    const packs = inferGenerationPacks(
+      `${manualName} ${manualFields.map((field) => field.name).join(" ")}`,
+      [manualName],
+    );
     const parsed = generatorRequestSchema.safeParse({
       name: manualName,
       count: manualCount === "" ? Number.NaN : Number(manualCount),
       seed: randomSeed[0] % 2_147_483_648,
+      ...packs,
       fields: manualFields.map((field) => ({
         name: field.name,
         type: field.type,
@@ -2021,10 +2099,21 @@ export default function GeneratorPanel({
   };
 
   const download = () => {
-    if (!dataset || (view !== "json" && view !== "csv")) return;
-    const isJson = view === "json";
-    const contents = isJson ? generatedJson : generatedCsv;
-    const mimeType = isJson ? "application/json" : "text/csv";
+    if (!dataset || (view !== "json" && view !== "csv" && view !== "sql")) {
+      return;
+    }
+    const contents =
+      view === "json"
+        ? generatedJson
+        : view === "csv"
+          ? generatedCsv
+          : generatedSql;
+    const mimeType =
+      view === "json"
+        ? "application/json"
+        : view === "csv"
+          ? "text/csv"
+          : "application/sql";
     const url = URL.createObjectURL(new Blob([contents], { type: mimeType }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -2208,15 +2297,15 @@ export default function GeneratorPanel({
         <div className="flex h-full min-w-0 items-center justify-end gap-1">
           {showDataPanel && (
             <div
-              className="flex h-full min-w-0 items-center gap-1"
+              className="flex h-full  min-w-0 items-center gap-1"
               role="tablist"
               aria-label="Generated data format"
             >
-              {(["table", "json", "csv"] as const).map((format) => {
+              {(["table", "json", "csv", "sql"] as const).map((format) => {
                 return (
                   <button
                     aria-selected={view === format}
-                    className={`h-full flex items-center gap-1 rounded-t-lg px-2 cursor-pointer text-[12px] transition ${
+                    className={`h-full flex items-center uppercase gap-1 rounded-t-lg px-2 cursor-pointer text-[12px] transition ${
                       view === format
                         ? "bg-white font-medium text-[#252721]"
                         : "font-medium text-[#666961] hover:bg-white/60 hover:text-[#252721]"
@@ -2248,6 +2337,26 @@ export default function GeneratorPanel({
                       >
                         <path d="M288-384h72v-48h-72v-96h72v-48h-72q-20.4 0-34.2 13.8Q240-548.4 240-528v96q0 20.4 13.8 34.2Q267.6-384 288-384Zm120 0h96q10.2 0 17.1-6.9 6.9-6.9 6.9-17.1v-72q0-10-6.9-17t-17.1-7h-48v-24h72v-48h-96q-10.2 0-17.1 6.9-6.9 6.9-6.9 17.1v72q0 10 6.9 17t17.1 7h48v24h-72v48Zm208 0h48l56-192h-50l-30 103-30-103h-50l56 192ZM168-192q-29.7 0-50.85-21.16Q96-234.32 96-264.04v-432.24Q96-726 117.15-747T168-768h624q29.7 0 50.85 21.16Q864-725.68 864-695.96v432.24Q864-234 842.85-213T792-192H168Zm0-72h624v-432H168v432Zm0 0v-432 432Z" />
                       </svg>
+                    ) : format === "sql" ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="1 1 18 18"
+                        height="18px"
+                        width="18px"
+                        fill="#999"
+                      >
+                        <path d="M10,16V14.5h6V16H10ZM5.13,13L4.06,11.94L7.5,8.5L4.06,5.06L5.13,4l4.5,4.5L5.13,13Z" />
+                      </svg>
+                    ) : format === "json" ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="1 1 18 18"
+                        height="18px"
+                        width="18px"
+                        fill="#999"
+                      >
+                        <path d="M4.5,12H6q0.21,0 0.36-0.14T6.5,11.5V8h-1v3H5V10H4v1.5q0,0.21 0.14,0.36T4.5,12Zm3,0H9q0.21,0 0.36-0.14T9.5,11.5V10.25q0-0.21-0.14-0.36T9,9.75H8V9H8.5V9.25h1V8.5q0-0.21-0.14-0.36T9,8H7.5Q7.29,8 7.14,8.14T7,8.5V9.75q0,0.21 0.14,0.36T7.5,10.25h1V11H8V10.75H7V11.5q0,0.21 0.14,0.36T7.5,12ZM11,11V9h0.5v2H11Zm-0.5,1H12q0.21,0 0.36-0.14T12.5,11.5v-3q0-0.21-0.14-0.36T12,8H10.5q-0.21,0-0.36,0.14T10,8.5v3q0,0.21 0.14,0.36T10.5,12ZM13,12h1V10.06L14.75,12h1V8h-1V9.94L14,8H13v4ZM3.5,16q-0.62,0-1.06-0.44T2,14.5V5.49Q2,4.88 2.44,4.44T3.5,4h13q0.62,0 1.06,0.44T18,5.5v9.01q0,0.62-0.44,1.06T16.5,16H3.5Zm0-1.5h13v-9H3.5v9Zm0,0v-9v9Z" />
+                      </svg>
                     ) : (
                       <p>[ ]</p>
                     )}
@@ -2267,8 +2376,16 @@ export default function GeneratorPanel({
                   role="tab"
                   type="button"
                 >
-                  <Boxes aria-hidden="true" className="size-3.5" />
-                  Schema Visualiser
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="1 1 18 18"
+                    height="15px"
+                    width="15px"
+                    fill="#999"
+                  >
+                    <path d="M2.5,14.5V3.5V7.75q0,0 0,0.66T2.5,10t0,1.59t0,0.66V14.5Zm15,2V12.25q0,0 0-0.66t0-1.59t0-1.59t0-0.66V5.5v11ZM6.47,10.54Q6.25,10.32 6.25,10T6.46,9.47T7,9.25T7.53,9.46T7.75,10T7.54,10.53T7,10.75T6.47,10.54Zm3,0Q9.25,10.32 9.25,10T9.46,9.47T10,9.25t0.54,0.21T10.75,10t-0.21,0.54T10,10.75T9.47,10.54Zm3,0Q12.25,10.32 12.25,10t0.21-0.54T13,9.25t0.54,0.21T13.75,10t-0.21,0.54T13,10.75t-0.54-0.21ZM12.5,18q-0.62,0-1.06-0.44T11,16.5V12.25h1.5V16.5h5V5.5h-5V7.75H11V5.5q0-0.62 0.44-1.06T12.5,4h5q0.62,0 1.06,0.44T19,5.5v11q0,0.62-0.44,1.06T17.5,18h-5Zm-10-2q-0.62,0-1.06-0.44T1,14.5V3.5Q1,2.88 1.44,2.44T2.5,2h5Q8.12,2 8.56,2.44T9,3.5V7.75H7.5V3.5h-5v11h5V12.25H9V14.5q0,0.62-0.44,1.06T7.5,16h-5ZM15.46,7.46Q15.65,7.27 15.65,7T15.46,6.54T15,6.35T14.54,6.54T14.35,7t0.19,0.46T15,7.65t0.46-0.19Zm-10-2Q5.65,5.27 5.65,5T5.46,4.54T5,4.35T4.54,4.54T4.35,5T4.54,5.46T5,5.65T5.46,5.46Z" />
+                  </svg>
+                  SCHEMA
                 </button>
               )}
             </div>
@@ -2276,7 +2393,7 @@ export default function GeneratorPanel({
           {showDataPanel && (
             <span className="ml-auto flex min-w-0 items-center gap-1">
               {dataset && view !== "schema" && (
-                <span className="shrink-0 mx- font-semibold uppercase rounded-t-lg text-[10px]  tracking-tight capitalize  text-[#696c64]">
+                <span className="shrink-0 hidden mx- font-semibold uppercase rounded-t-lg text-[10px]  tracking-tight capitalize  text-[#696c64]">
                   {dataset.count} rows
                 </span>
               )}
@@ -2289,14 +2406,18 @@ export default function GeneratorPanel({
                   type="button"
                 >
                   <svg
-                    aria-hidden="true"
                     xmlns="http://www.w3.org/2000/svg"
-                    height="18px"
-                    viewBox="0 -960 960 960"
-                    width="18px"
-                    fill="currentColor"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    className="size-4"
                   >
-                    <path d="M640-480v-80h80v80h-80Zm0 80h-80v-80h80v80Zm0 80v-80h80v80h-80ZM447-640l-80-80H160v480h400v-80h80v80h160v-400H640v80h-80v-80H447ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80v-480 480Z" />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
+                    />
                   </svg>
                 </button>
               )}
@@ -2447,7 +2568,7 @@ export default function GeneratorPanel({
                               />
                             </form>
                           ) : (
-                            message.content
+                            <MessageContent content={message.content} />
                           )}
                           {message.role === "assistant" &&
                             message.modelUsed && (
@@ -2827,8 +2948,7 @@ export default function GeneratorPanel({
                       <span>
                         {generationPhase === "analyzing" &&
                           "Analyzing request…"}
-                        {generationPhase === "generating" &&
-                          "Processing…"}
+                        {generationPhase === "generating" && "Processing…"}
                         {generationPhase === "finalizing" &&
                           "Finalizing results…"}
                       </span>
@@ -3151,7 +3271,7 @@ export default function GeneratorPanel({
 
               <div>
                 <p className="mt-2 flex text-center mx-auto max-w-fit text-[10px] font-semibold text-[#999]">
-                  AI can make mistakes. Always verify the results.
+                  AI can make mistakes. Always verify generated data.
                 </p>
               </div>
             </form>
@@ -3372,7 +3492,7 @@ export default function GeneratorPanel({
                 </div>
                 <span
                   aria-label={`${generatedTables.reduce((total, table) => total + table.records.length, 0)} total generated records`}
-                  className="shrink-0 border-l border-[#e5e8e2] pl-1 text-xs font-medium text-[#21824b]"
+                  className="shrink-0 border-l hidden border-[#e5e8e2] pl-1 text-xs font-medium text-[#21824b]"
                   title="Total generated records"
                 >
                   {generatedTables

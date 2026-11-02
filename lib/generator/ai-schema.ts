@@ -59,6 +59,16 @@ const aiFieldTypeSchema = z.preprocess((value) => {
     time: "date",
     streetaddress: "address",
     postaladdress: "address",
+    point: "coordinates",
+    geopoint: "coordinates",
+    coordinates: "coordinates",
+    temperature: "temperature",
+    precipitation: "precipitation",
+    country: "country",
+    url: "url",
+    postalcode: "postalCode",
+    carrier: "carrier",
+    trackingnumber: "trackingNumber",
   };
   return aliases[normalized] ?? value;
 }, z.enum(fieldTypes));
@@ -144,6 +154,7 @@ export function extractOpenRouterContent(
 
 function normalizeAiField(
   field: z.infer<typeof aiFieldSchema>,
+  tableName: string,
 ): {
   name: string;
   type: FieldType;
@@ -152,19 +163,48 @@ function normalizeAiField(
   references?: { table: string; field: string };
 } {
   const fieldName = field.name.toLowerCase();
-  const inferredType =
-    fieldName === "id_number" || fieldName === "idnumber"
-      ? "idNumber"
-      : fieldName === "name" || fieldName === "full_name"
-        ? "fullName"
-        : fieldName === "email"
-          ? "email"
-          : fieldName === "phone" || fieldName === "phone_number"
-            ? "phone"
-            : fieldName === "address" || fieldName.endsWith("_address")
-              ? "address"
-              : null;
-  const type = field.type === "text" ? (inferredType ?? "text") : field.type;
+  const normalizedTableName = tableName.toLowerCase();
+  const inferredType: FieldType | null =
+    /^(?:carrier|carrier_name|shipping_carrier)$/.test(fieldName)
+      ? "carrier"
+      : /^(?:tracking|tracking_no|tracking_number|tracking_code|tracking_id)$/.test(fieldName)
+        ? "trackingNumber"
+        : /(?:^|_)(?:temp|temperature)(?:_|$)/.test(fieldName)
+      ? "temperature"
+      : /^(?:prcp|precip(?:itation)?|rain(?:fall)?)(?:_|$)/.test(fieldName)
+        ? "precipitation"
+        : /^(?:city|city_name)$/.test(fieldName) ||
+            (fieldName === "name" &&
+              /^(?:cities|city|towns|town)$/.test(normalizedTableName))
+          ? "city"
+          : fieldName === "location" &&
+              /^(?:cities|city|towns|town)$/.test(normalizedTableName)
+            ? "coordinates"
+            : /^(?:country|country_name)$/.test(fieldName)
+              ? "country"
+              : /^(?:url|website|homepage|profile_url)$/.test(fieldName)
+                ? "url"
+                : /^(?:postal_code|postcode|zip|zip_code)$/.test(fieldName)
+                  ? "postalCode"
+                  : fieldName === "id_number" || fieldName === "idnumber"
+              ? "idNumber"
+              : /^(?:product_name|name)$/.test(fieldName) &&
+                  /product|item|catalog/.test(normalizedTableName)
+                ? "product"
+                : /^(?:company_name|name)$/.test(fieldName) &&
+                    /compan|organization|business/.test(normalizedTableName)
+                  ? "company"
+              : fieldName === "name" || fieldName === "full_name"
+                ? "fullName"
+                : fieldName === "email"
+                  ? "email"
+                  : fieldName === "phone" || fieldName === "phone_number"
+                    ? "phone"
+                    : fieldName === "address" ||
+                        fieldName.endsWith("_address")
+                      ? "address"
+                      : null;
+  const type = inferredType ?? field.type;
 
   return {
     name: field.name,
@@ -256,7 +296,7 @@ export function parseAiSchema(
     request: createRelationalGeneratorRequestSchema(limits).parse({
       tables: tables.map((table) => ({
         ...table,
-        fields: table.fields.map(normalizeAiField),
+        fields: table.fields.map((field) => normalizeAiField(field, table.name)),
       })),
       count,
       seed,
