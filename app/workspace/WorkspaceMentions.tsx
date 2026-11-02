@@ -286,7 +286,7 @@ export default function WorkspaceMentions({
       (member) => member.id === mention.authorId && member.isCurrentUser,
     );
 
-    if (authoredByCurrentUser) return `You mentioned ${recipientNames}`;
+    if (authoredByCurrentUser) return `You Mentioned ${recipientNames}`;
     if (mention.isMentioned) {
       return `${memberName(mention.authorId)} mentioned you`;
     }
@@ -476,7 +476,7 @@ export default function WorkspaceMentions({
             >
               <fieldset disabled={sending || loading}>
                 <legend className="mb-1.5 flex w-full items-center justify-between gap-2 text-[11px] tracking-tight font-semibold text-[#50534b]">
-                  <span>Mention workspace members</span>
+                  <span>Mention Members</span>
                   <button
                     className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-[#4c6545] transition hover:bg-[#f0f5ed] disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={
@@ -503,10 +503,10 @@ export default function WorkspaceMentions({
                       const selected = selectedRecipients.includes(member.id);
                       return (
                         <label
-                          className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] transition ${
+                          className={`flex cursor-pointer text-[11px] tracking-tight font-semibold items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] transition ${
                             selected
-                              ? "border-[#b8c5b0] bg-[#f0f5ed] text-[#3f5838]"
-                              : "border-[#e1e3de] text-[#555850] hover:bg-[#f7f8f5]"
+                              ? "border-[#b8c5b0] bg-[#f0f5ed] rounded-full text-[#3f5838]"
+                              : "border-[#e1e3de]  text-[#555850]  hover:bg-[#f7f8f5]"
                           }`}
                           key={member.id}
                         >
@@ -550,7 +550,7 @@ export default function WorkspaceMentions({
               )}
               <div className="mt-1.5 font-semibold tracking-tight flex items-center justify-between gap-2">
                 <span className="text-[10px] text-[#868880]">
-                  {selectedRecipients.length} selected · {message.length}/500
+                  {message.length}/500
                 </span>
                 <button
                   className="flex items-center gap-0.5 rounded-full bg-[#242620] px-2 py-1 text-xs font-semibold text-white transition hover:bg-[#3b3d36] disabled:cursor-not-allowed disabled:opacity-50"

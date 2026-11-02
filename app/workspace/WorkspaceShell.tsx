@@ -94,18 +94,13 @@ const navigation: {
     label: "Generate",
     icon: (
       <svg
-        aria-hidden="true"
-        width="14"
-        height="14"
-        viewBox="0 0 199 195"
-        fill="none"
         xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        height="16px"
+        width="16px"
+        fill="#999"
       >
-        <path
-          d="M129.608 37.8861C127.627 34.8993 125.692 31.8809 123.804 28.8318L115.918 16.1007C108.224 3.67999 90.1556 3.67997 82.4621 16.1007L74.5764 28.8318C72.6877 31.8809 70.7528 34.8993 68.7722 37.8861M129.608 37.8861C140.836 54.8191 153.528 70.7345 167.538 85.4492M129.608 37.8861C109.368 39.6651 89.0117 39.6651 68.7722 37.8861M129.608 37.8861C133.178 37.5723 136.744 37.2032 140.306 36.7787L155.176 35.0063C169.683 33.2771 180.949 47.4039 176.035 61.1631L170.998 75.2659C169.792 78.6436 168.638 82.0385 167.538 85.4492M167.538 85.4492C170.009 88.0447 172.521 90.6028 175.074 93.1226L185.731 103.644C196.128 113.908 192.108 131.524 178.286 136.261L164.12 141.116C160.727 142.278 157.354 143.493 154.001 144.759M167.538 85.4492C161.3 104.785 156.77 124.632 154.001 144.759M154.001 144.759C153.512 148.31 153.079 151.869 152.7 155.436L151.119 170.327C149.577 184.856 133.297 192.696 120.976 184.843L108.348 176.794C105.323 174.867 102.27 172.987 99.19 171.155M154.001 144.759C134.994 151.938 116.653 160.771 99.19 171.155M99.19 171.155C96.1097 172.987 93.0567 174.867 90.0322 176.794L77.4035 184.843C65.0828 192.696 48.8034 184.856 47.2609 170.327L45.68 155.436C45.3013 151.869 44.8676 148.31 44.3791 144.759M99.19 171.155C81.7267 160.771 63.3861 151.938 44.3791 144.759M44.3791 144.759C41.0265 143.493 37.6532 142.278 34.2603 141.116L20.0937 136.261C6.27243 131.524 2.25171 113.908 12.649 103.644L23.3062 93.1226C25.8585 90.6028 28.3707 88.0447 30.8419 85.4492M44.3791 144.759C41.6098 124.632 37.08 104.785 30.8419 85.4492M30.8419 85.4492C29.7416 82.0385 28.5881 78.6436 27.3817 75.2659L22.3449 61.1631C17.4308 47.4039 28.6965 33.2771 43.2042 35.0063L58.0745 36.7787C61.6359 37.2032 65.2022 37.5723 68.7722 37.8861M30.8419 85.4492C44.8519 70.7345 57.544 54.8191 68.7722 37.8861"
-          strokeWidth="13.5703"
-          stroke="#999999"
-        />
+        <path d="M18,20.5l-4-4l4-4l1.4,1.4l-1.58,1.6H22v2H17.83l1.58,1.6L18,20.5ZM4,20q-0.82,0-1.41-0.59T2,18V15q0-0.83 0.59-1.41T4,13h6q0.83,0 1.41,0.59Q12,14.18 12,15v3q0,0.82-0.59,1.41T10,20H4Zm0-2h6V15H4v3Zm2-6.5L4.6,10.1L6.18,8.5H2v-2H6.18L4.6,4.9L6,3.5l4,4l-4,4ZM14,11q-0.82,0-1.41-0.59T12,9V6q0-0.82 0.59-1.41T14,4h6q0.83,0 1.41,0.59Q22,5.18 22,6V9q0,0.82-0.59,1.41T20,11H14Zm0-2h6V6H14V9Zm-4,9V15v3Zm4-9V6V9Z" />
       </svg>
     ),
   },
@@ -138,7 +133,6 @@ const navigation: {
     comingSoon: true,
     icon: <LayoutGrid aria-hidden="true" className="size-[14px]" />,
   },
-  
 
   {
     id: "developer",
@@ -908,7 +902,11 @@ export default function WorkspaceShell({
         aria-label="Workspace sidebar"
         className="flex w-[260px] shrink-0 flex-col border-r border-[#e9ebe6] bg-[#fbfcf9] max-[640px]:w-[68px]"
       >
-        <header className="flex h-[31px] shrink-0 items-center gap-[14px] border-b border-[#eef0eb] px-[10px]">
+        <header className="flex justify-between   h-[31px] shrink-0 items-center gap-[14px] border-b border-[#eef0eb] px-[10px]">
+          
+          <h1 className=" text-sm font-semibold capitalize tracking-tighter">
+            Synthetic
+          </h1>
           <div className=" p-2 flex items-center gap-[10px]">
             <button
               aria-label="Go back"
@@ -954,7 +952,6 @@ export default function WorkspaceShell({
                   className="absolute left-0 top-[calc(100%+6px)] z-[70] max-h-[min(78vh,300px)] w-[min(300px,calc(100vw-84px))] overflow-y-auto rounded-lg border border-[#dfe2dc] bg-[#fbfcf9] text-[#242620] shadow-[0_8px_24px_rgba(20,24,18,0.14)]"
                   role="region"
                 >
-                  
                   <div className="sticky top-0 z-10">
                     <header className="flex items-center justify-between border-b border-[#e7e8e4] bg-[#fbfcf9] px-2.5 py-1.5">
                       <h2 className="text-[13px] font-semibold tracking-tight text-[#60625d]">
@@ -1006,7 +1003,6 @@ export default function WorkspaceShell({
                             }}
                             type="button"
                           >
-                            
                             <span className="min-w-0 flex-1 text-[10px] truncate text-[11px] font-semibold text-[#4c4e48]">
                               {conversation.title}
                             </span>
@@ -1194,7 +1190,9 @@ export default function WorkspaceShell({
               <button
                 aria-pressed={archivedChatsOnly}
                 aria-label={
-                  archivedChatsOnly ? "Show all saved chats" : "Show archived chats only"
+                  archivedChatsOnly
+                    ? "Show all saved chats"
+                    : "Show archived chats only"
                 }
                 className="mb-2 flex size-6 shrink-0 items-center justify-center rounded text-[#858780] hover:bg-[#f4f5f1] hover:text-[#646660] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#858780]"
                 onClick={() => {
@@ -1203,7 +1201,9 @@ export default function WorkspaceShell({
                   setArchivedChatsOnly((only) => !only);
                 }}
                 title={
-                  archivedChatsOnly ? "Show all saved chats" : "Show archived chats only"
+                  archivedChatsOnly
+                    ? "Show all saved chats"
+                    : "Show archived chats only"
                 }
                 type="button"
               >
@@ -1247,8 +1247,8 @@ export default function WorkspaceShell({
                       {archivedChats.length}
                     </span>
                   </button>
-                  {archivedChatsOpen && (
-                    archivedChats.length > 0 ? (
+                  {archivedChatsOpen &&
+                    (archivedChats.length > 0 ? (
                       <div className="space-y-[2px]">
                         {archivedChats.map(renderChat)}
                       </div>
@@ -1256,8 +1256,7 @@ export default function WorkspaceShell({
                       <p className="mb-1 truncate text-[12px] font-medium tracking-tight text-[#999] max-[640px]:sr-only">
                         No archived chats yet
                       </p>
-                    )
-                  )}
+                    ))}
                 </div>
               )}
             </div>

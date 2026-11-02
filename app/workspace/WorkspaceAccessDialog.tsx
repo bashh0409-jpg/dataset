@@ -12,6 +12,7 @@ import {
   getWorkspaceMembers,
   type WorkspaceMember,
 } from "@/app/actions/workspaces";
+import Loader from "../components/Loader";
 
 type WorkspaceAccessDialogProps = {
   mode: "invite" | "manage";
@@ -464,7 +465,7 @@ export default function WorkspaceAccessDialog({
             </section>
             {loading ? (
               <p className="py-8 text-center tracking-tight font-medium text-sm text-[#999]">
-                Loading workspace members...
+                <Loader />
               </p>
             ) : error ? (
               <p

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ApiKeySummary } from "./DeveloperPanel";
 import WorkspaceShell from "./WorkspaceShell";
+import Loader from "../components/Loader";
 
 export const maxDuration = 60;
 
@@ -156,7 +157,7 @@ function WorkspaceLoading() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#fbfcf9] text-sm text-[#777]">
       <p className="geist text-center text-sm font-medium leading-4 tracking-tight text-[#999]">
-        Loading workspace...
+        <Loader />
       </p>
     </main>
   );

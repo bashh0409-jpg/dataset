@@ -29,6 +29,7 @@ import {
   KeyRound,
   Network,
   Folder,
+  Shuffle,
 } from "lucide-react";
 import {
   useCallback,
@@ -141,7 +142,18 @@ const examples = [
   "Generate 3 customers with a UUID, full name, email, and phone number",
   "Create 3 products with a name, price, and category",
   "Generate 3 users and 3 orders linked by user ID",
+  "Create 3 companies with a name, industry, and website",
+  "Generate 3 transactions with an amount, currency, and status",
+  "Make 3 support tickets with a subject, priority, and status",
 ];
+const getRandomExample = (currentExample: string) => {
+  const availableExamples = examples.filter(
+    (example) => example !== currentExample,
+  );
+  return availableExamples[
+    Math.floor(Math.random() * availableExamples.length)
+  ] ?? examples[0];
+};
 const maxTextAttachmentBytes = 64_000;
 const maxFreeTextAttachmentCharacters = 20_000;
 const schemaCanvasPadding = 2_400;
@@ -231,7 +243,6 @@ export default function GeneratorPanel({
   const [dataset, setDataset] = useState<GeneratedDataset | null>(null);
   const [generatedTables, setGeneratedTables] = useState<GeneratedDataset[]>([]);
   const [artifacts, setArtifacts] = useState<AiGeneratedArtifact[]>([]);
-  const [exampleFlyoutOpen, setExampleFlyoutOpen] = useState(false);
   const [previewAttachmentIndex, setPreviewAttachmentIndex] = useState<
     number | null
   >(null);
@@ -264,7 +275,6 @@ export default function GeneratorPanel({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const conversationScrollRef = useRef<HTMLDivElement>(null);
   const pendingConversationScrollRef = useRef<ScrollBehavior | null>(null);
-  const exampleFlyoutRef = useRef<HTMLDivElement>(null);
   const attachmentFlyoutRef = useRef<HTMLDivElement>(null);
   const messageAttachmentButtonRef = useRef<HTMLButtonElement>(null);
   const composerAttachmentFlyoutRef = useRef<HTMLDivElement>(null);
@@ -1625,29 +1635,6 @@ export default function GeneratorPanel({
   }, [view]);
 
   useEffect(() => {
-    if (!exampleFlyoutOpen) return;
-
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !exampleFlyoutRef.current?.contains(event.target)
-      ) {
-        setExampleFlyoutOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setExampleFlyoutOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [exampleFlyoutOpen]);
-
-  useEffect(() => {
     if (
       previewAttachmentIndex === null &&
       !composerAttachmentFlyoutOpen
@@ -1701,7 +1688,6 @@ export default function GeneratorPanel({
         }));
         setConversation(messages);
         setArtifacts(result.data.artifacts);
-        setExampleFlyoutOpen(false);
         setPrompt("");
         resetSchemaCanvas();
         setDataset(null);
@@ -2165,8 +2151,11 @@ export default function GeneratorPanel({
     setMode("agent");
     setPrompt(example);
     setError("");
-    setExampleFlyoutOpen(false);
     window.requestAnimationFrame(() => promptInputRef.current?.focus());
+  };
+
+  const shuffleExample = () => {
+    selectExample(getRandomExample(prompt));
   };
 
   const attachPromptFile = async (
@@ -3026,56 +3015,22 @@ export default function GeneratorPanel({
                   </button>
                 </div>
                 <div
-                  className={`relative flex h-8 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[12px] text-[#696c64] motion-safe:transition-[width,gap] motion-safe:duration-200 motion-safe:ease-in-out ${
-                    exampleFlyoutOpen ? "overflow-visible" : "overflow-hidden"
-                  } ${showScrollToBottom ? "w-[4.25rem] gap-1" : "w-8 gap-0"}`}
-                  ref={exampleFlyoutRef}
+                  className={`relative flex h-8 shrink-0 items-center justify-center rounded-full bg-white px-1 text-[12px] text-[#696c64] motion-safe:transition-[width,gap] motion-safe:duration-200 motion-safe:ease-in-out overflow-hidden ${
+                    showScrollToBottom ? "w-[4.25rem] gap-1" : "w-8 gap-0"
+                  }`}
                 >
                   <button
-                    aria-controls="generation-examples-flyout"
-                    aria-expanded={exampleFlyoutOpen}
-                    aria-haspopup="dialog"
-                    aria-label="Try an example"
+                    aria-label="Shuffle example"
                     className=" w-6 h-6 flex items-center justify-center rounded-full cursor-pointer  text-[#20221e]"
-                    onClick={() => setExampleFlyoutOpen((isOpen) => !isOpen)}
-                    title="Try an example"
+                    onClick={shuffleExample}
+                    title="Shuffle example"
                     type="button"
                   >
-                    <MessageSquareText
+                    <Shuffle
                       aria-hidden="true"
                       className="size-[15px] text-[#858880]"
                     />
                   </button>
-                  {exampleFlyoutOpen && (
-                    <section
-                      aria-label="Generation examples"
-                      className="absolute tracking-tight bottom-[calc(100%+10px)] left-0 z-40 w-[min(340px,calc(100vw-48px))] rounded-xl border border-[#e2e5df] bg-white p-2 text-left shadow-[0_12px_36px_rgba(20,24,18,0.16)]"
-                      id="generation-examples-flyout"
-                      role="dialog"
-                    >
-                      <div className="mb-2 hidden flex items-center justify-between gap-3">
-                        <h2 className="text-[12px] font-semibold text-[#373a34]">
-                          Try an example
-                        </h2>
-                        <span className="text-[10px] text-[#858880]">
-                          Select one to fill the prompt
-                        </span>
-                      </div>
-                      <ul className="space-y-1 ">
-                        {examples.map((example) => (
-                          <li key={example}>
-                            <button
-                              className="w-full rounded-lg  p-2 text-left text-[11px] leading-4 text-[#55584f] transition hover:bg-[#f5f7f3] focus-visible:outline-2 focus-visible:outline-[#858780]"
-                              onClick={() => selectExample(example)}
-                              type="button"
-                            >
-                              {example}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
                   <span
                     aria-hidden="true"
                     className={`h-3 shrink-0 bg-black/10 transition-[width,opacity] duration-200 ${
